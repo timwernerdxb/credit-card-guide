@@ -46,7 +46,7 @@
   .header {
     background: linear-gradient(180deg, #0E0C08 0%, var(--bg) 100%);
     border-bottom: 1px solid var(--border-gold);
-    padding: 24px 20px 20px;
+    padding: 14px 16px 0;
     position: sticky;
     top: 0;
     z-index: 100;
@@ -54,9 +54,9 @@
 
   .header-top {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 8px;
   }
 
   .logo {
@@ -608,6 +608,131 @@
   .insight-banner p { font-size: 12px; color: var(--text-dim); line-height: 1.7; }
   .insight-banner strong { color: var(--text); }
 
+
+  /* CPP PANEL IN HEADER */
+  .cpp-panel {
+    border-top: 1px solid rgba(201,168,76,0.12);
+    padding: 8px 0 2px;
+    margin-top: 8px;
+  }
+  .cpp-panel-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 5px;
+  }
+  .cpp-panel-label {
+    font-family: 'Syne', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .cpp-panel-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--gold);
+  }
+  .cpp-panel input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 2px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    margin-bottom: 7px;
+    display: block;
+    cursor: pointer;
+  }
+  .cpp-panel input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--gold);
+    cursor: pointer;
+    border: 2px solid #0A0A0A;
+    box-shadow: 0 0 5px rgba(201,168,76,0.5);
+  }
+  .mini-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 3px;
+  }
+  .mini-bar-label {
+    width: 110px;
+    font-size: 8.5px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .mini-bar-track {
+    flex: 1;
+    height: 4px;
+    background: var(--bg4);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .mini-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.35s ease;
+  }
+  .mini-bar-num {
+    width: 62px;
+    text-align: right;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    flex-shrink: 0;
+    line-height: 1.3;
+  }
+  .sub-val {
+    font-size: 8px;
+    color: var(--text-muted);
+    display: block;
+  }
+  .mini-fixed-note {
+    font-size: 8px;
+    color: var(--text-muted);
+    padding: 3px 0 4px;
+    line-height: 1.5;
+  }
+
+
+  .scenario-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .scenario-bar-label {
+    width: 110px;
+    font-size: 8.5px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .scenario-bar-track {
+    flex: 1;
+    height: 5px;
+    background: var(--bg4);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .scenario-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.35s ease;
+  }
+  .scenario-bar-num {
+    width: 62px;
+    text-align: right;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    flex-shrink: 0;
+    line-height: 1.3;
+  }
   .mt-8 { margin-top: 8px; }
   .mt-12 { margin-top: 12px; }
   .mt-16 { margin-top: 16px; }
@@ -617,13 +742,45 @@
 
 <div class="header">
   <div class="header-top">
-    <div>
-      <div class="logo">Credit Optimizer</div>
-    </div>
+    <div class="logo">Credit Optimizer</div>
     <div class="version">v3.0 — Feb 2026</div>
   </div>
-  <div class="header-title">Emirates <span>Skywards</span><br>Maximizer</div>
-  <div class="header-subtitle">1 USD = 3.67 AED · Miles: 3–7 cpp</div>
+
+  <div class="cpp-panel">
+    <div class="cpp-panel-top">
+      <span class="cpp-panel-label">◆ Everyday spend rates</span>
+      <span class="cpp-panel-value" id="cpp-display">4.0 cpp</span>
+    </div>
+    <input type="range" min="3" max="7" step="0.5" value="4" oninput="updateRates(this.value)">
+    <div class="mini-bar-row">
+      <div class="mini-bar-label">Strata Elite (US)</div>
+      <div class="mini-bar-track"><div class="mini-bar-fill" id="bar-strata" style="background:var(--blue)"></div></div>
+      <div class="mini-bar-num" id="num-strata" style="color:var(--blue)"></div>
+    </div>
+    <div class="mini-bar-row">
+      <div class="mini-bar-label">Centurion (UAE)</div>
+      <div class="mini-bar-track"><div class="mini-bar-fill" id="bar-centurion" style="background:var(--gold)"></div></div>
+      <div class="mini-bar-num" id="num-centurion" style="color:var(--gold)"></div>
+    </div>
+    <div class="mini-bar-row">
+      <div class="mini-bar-label">Ultima – AED (UAE)</div>
+      <div class="mini-bar-track"><div class="mini-bar-fill" id="bar-ultima" style="background:var(--red)"></div></div>
+      <div class="mini-bar-num" id="num-ultima" style="color:var(--red)"></div>
+    </div>
+    <div class="mini-bar-row">
+      <div class="mini-bar-label">Ultima – USD (UAE)</div>
+      <div class="mini-bar-track"><div class="mini-bar-fill" id="bar-ultima-intl" style="background:#E08060"></div></div>
+      <div class="mini-bar-num" id="num-ultima-intl" style="color:#E08060"></div>
+    </div>
+    <div class="mini-bar-row">
+      <div class="mini-bar-label">AMEX Plat (US)</div>
+      <div class="mini-bar-track"><div class="mini-bar-fill" id="bar-plat" style="background:var(--text-muted)"></div></div>
+      <div class="mini-bar-num" id="num-plat" style="color:var(--text-dim)"></div>
+    </div>
+    <div class="mini-fixed-note">
+      <span style="color:var(--red)">★ Ultima bars fixed</span> — cash redemption, cpp-independent. Values shown w/o bonus reflect pre-neobank rate. USD: 5pts/$1 – 3.15% FX (incl. VAT).
+    </div>
+  </div>
 
   <nav class="nav">
     <button class="nav-btn active" onclick="showSection('decide')">Decide</button>
@@ -785,45 +942,129 @@
     <p>6x portal (19.2%) vs 5x direct (16.0%) — gap is tighter. Portal can be ~15–20% more before direct wins. Always price-check both.</p>
   </div>
 
-  <div class="section-title mt-16" style="font-size:16px">Base Rates <span>Comparison</span></div>
-  <div class="section-desc">Interactive — adjust mile valuation</div>
+  <div style="margin-top:20px">
+    <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.15em;text-transform:uppercase;color:var(--text);margin-bottom:4px">Scenario <span style="color:var(--gold)">Comparison</span></div>
+    <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px">How each card performs per specific spending category</div>
 
-  <div class="slider-section">
-    <div class="slider-label">
-      <span>Mile value (cpp)</span>
-      <span class="slider-value" id="cpp-display">4.0 cpp</span>
+    <!-- SCENARIO 1: Airline ticket direct -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text)">✈️ Airline Ticket (booked direct)</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">Non-portal, any airline</div>
+        </div>
+        <span class="badge badge-gold">AMEX Plat wins</span>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">AMEX Plat (US)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:var(--gold);width:83.3%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--gold)" id="scen-flight-plat"></div>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">Strata Elite (US)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:var(--blue);width:25%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--blue)" id="scen-flight-strata"></div>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">Centurion (UAE)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:#888;width:21.8%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--text-muted)" id="scen-flight-cent"></div>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">Ultima – AED (UAE)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:var(--red);width:20.3%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--red)">3.89%<span class="sub-val">w/o bonus: 3.39%</span></div>
+      </div>
+      <div class="scenario-bar-row scen-flight-ultima-usd">
+        <div class="scenario-bar-label">Ultima – USD (UAE)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:#E08060;width:10.8%"></div></div>
+        <div class="scenario-bar-num" style="color:#E08060">4.13%<span class="sub-val">w/o bonus: 3.63%</span></div>
+      </div>
+      <div style="font-size:9px;color:var(--text-muted);margin-top:6px">AMEX Plat 5x MR → 4.0 Skywards/$. Centurion earns same low base rate as general spend here — no bonus.</div>
     </div>
-    <input type="range" min="3" max="7" step="0.5" value="4" oninput="updateRates(this.value)">
 
-    <div class="rate-bar-row">
-      <div class="rate-bar-label">Strata Elite</div>
-      <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-strata" style="background:var(--blue)"></div></div>
-      <div class="rate-bar-num rate" id="num-strata" style="color:var(--blue)"></div>
+    <!-- SCENARIO 2: Hotel via portal -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text)">🏨 Hotel (booked via Citi Portal)</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">1–2 nights, no Ultima 3rd night available</div>
+        </div>
+        <span class="badge badge-blue">Strata wins</span>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">Strata Elite 12x (US)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:var(--blue);width:100%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--blue)" id="scen-hotel-strata"></div>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">AMEX Plat (US)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:var(--gold);width:8.3%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--gold)" id="scen-hotel-plat"></div>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">Centurion (UAE)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:#888;width:10.9%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--text-muted)" id="scen-hotel-cent"></div>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">Ultima – AED (UAE)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:var(--red);width:10.1%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--red)">3.89%<span class="sub-val">w/o bonus: 3.39%</span></div>
+      </div>
+      <div class="scenario-bar-row scen-hotel-ultima-usd">
+        <div class="scenario-bar-label">Ultima – USD (UAE)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:#E08060;width:10.8%"></div></div>
+        <div class="scenario-bar-num" style="color:#E08060">4.13%<span class="sub-val">w/o bonus: 3.63%</span></div>
+      </div>
+      <div style="font-size:9px;color:var(--text-muted);margin-top:6px">Strata 12x = 9.6 Skywards/$1 = 38.4% at 4cpp. All others earn base rate only on hotels.</div>
     </div>
-    <div class="rate-bar-row">
-      <div class="rate-bar-label">Centurion</div>
-      <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-centurion" style="background:var(--gold)"></div></div>
-      <div class="rate-bar-num" id="num-centurion" style="color:var(--gold)"></div>
+
+    <!-- SCENARIO 3: Restaurant -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text)">🍽️ Restaurant (anywhere)</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">UAE, US, or international</div>
+        </div>
+        <span class="badge badge-blue">Strata wins</span>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">Strata Elite 3x (US)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:var(--blue);width:25%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--blue)" id="scen-rest-strata"></div>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">AMEX Plat (US)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:var(--gold);width:8.3%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--gold)" id="scen-rest-plat"></div>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">Centurion (UAE)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:#888;width:10.9%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--text-muted)" id="scen-rest-cent"></div>
+      </div>
+      <div class="scenario-bar-row">
+        <div class="scenario-bar-label">Ultima – AED (UAE)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:var(--red);width:10.1%"></div></div>
+        <div class="scenario-bar-num" style="color:var(--red)">3.89%<span class="sub-val">w/o bonus: 3.39%</span></div>
+      </div>
+      <div class="scenario-bar-row scen-rest-ultima-usd">
+        <div class="scenario-bar-label">Ultima – USD (UAE)</div>
+        <div class="scenario-bar-track"><div class="scenario-bar-fill" style="background:#E08060;width:10.8%"></div></div>
+        <div class="scenario-bar-num" style="color:#E08060">4.13%<span class="sub-val">w/o bonus: 3.63%</span></div>
+      </div>
+      <div style="font-size:9px;color:var(--text-muted);margin-top:6px">Strata 3x = 2.4 Skywards/$1. No FX fees globally. Centurion and Plat earn base rate only.</div>
     </div>
-    <div class="rate-bar-row">
-      <div class="rate-bar-label">Ultima (AED)</div>
-      <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-ultima" style="background:var(--red)"></div></div>
-      <div class="rate-bar-num" id="num-ultima" style="color:var(--red)"></div>
+
+    <div style="font-size:9px;color:var(--text-muted);padding:6px 8px;background:var(--bg3);border-radius:6px;line-height:1.6">
+      ★ Ultima fixed bars always show 3.89% (AED domestic). Scenario bars for miles-earning cards update with the header slider.
     </div>
-    <div class="rate-bar-row">
-      <div class="rate-bar-label">Ultima (USD)</div>
-      <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-ultima-intl" style="background:#E08060"></div></div>
-      <div class="rate-bar-num" id="num-ultima-intl" style="color:#E08060"></div>
-    </div>
-    <div class="rate-bar-row">
-      <div class="rate-bar-label">AMEX Plat</div>
-      <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-plat" style="background:var(--text-muted)"></div></div>
-      <div class="rate-bar-num" id="num-plat" style="color:var(--text-dim)"></div>
-    </div>
-    <div style="font-size:10px;color:var(--text-muted);margin-top:8px;padding:8px;background:var(--bg3);border-radius:6px;line-height:1.7">
-      <span style="color:var(--red)">★ Both Ultima bars are fixed</span> — redeems at 20 pts = 1 AED (fixed cash value), so cpp doesn't affect them.<br>
-      <span style="color:var(--red)">Ultima AED</span> = domestic spend (2.5pts/4 AED) · <span style="color:#E08060">Ultima USD</span> = international (5pts/$1 – 3% FX fee)
-    </div>
+  </div>
+
+  <div class="highlight mt-12" style="border-color:rgba(91,155,213,0.2);background:rgba(91,155,213,0.04)">
+    <div class="highlight-title" style="color:var(--blue)">☰ Base Rate Comparison</div>
+    <p>The <strong style="color:var(--text)">Mile Value slider</strong> in the sticky header above updates all card returns live. Drag it to see returns shift at your redemption value. Ultima bars stay flat — its return is always fixed regardless of cpp.</p>
   </div>
 </div>
 
@@ -1377,16 +1618,74 @@
     const max = Math.max(parseFloat(straRet), parseFloat(cenRet), ultAED, ultUSD, parseFloat(platRet));
 
     setBar('strata',       straRet,          max);
-    setBar('centurion',    cenRet,           max);
-    setBar('ultima',       ultAED.toFixed(2), max);
-    setBar('ultima-intl',  ultUSD.toFixed(2), max);
+    setBar('centurion',    cenRet,           max, (rates.centurion * cpp).toFixed(2));
+    setBar('ultima',       ultAED.toFixed(2), max, '3.39');
+    setBar('ultima-intl',  ultUSD.toFixed(2), max, '3.63');
     setBar('plat',         platRet,          max);
+
+    // Scenario bars — update text labels (widths are relative to scenario max, set in JS)
+    const skyVal = cpp / 100;
+
+    // Flight direct: AMEX Plat 5x*0.8=4.0 sky/$, Strata 1.5x*0.8=1.2 sky/$, Centurion ~0.9175 sky/$
+    const fPlat   = (4.0   * cpp).toFixed(1) + '%';
+    const fStrata = (1.2   * cpp).toFixed(1) + '%';
+    const fCent   = (0.9175 * cpp + 0.5).toFixed(1) + '%';
+    // Helper for cents per point without neobank
+    const centNoNeo = (0.9175 * cpp).toFixed(2);
+    const fCentNoNeo = (0.9175 * cpp).toFixed(1);
+    const hCentNoNeo = (0.9175 * cpp).toFixed(1);
+    const rCentNoNeo = (0.9175 * cpp).toFixed(1);
+
+    // Flight direct scenario
+    const fMax = 4.0 * cpp;
+    setScenarioBarFull('scen-flight-plat',   4.0    * cpp,         fMax, null);
+    setScenarioBarFull('scen-flight-strata', 1.2    * cpp,         fMax, null);
+    setScenarioBarFull('scen-flight-cent',   0.9175 * cpp + 0.5,  fMax, fCentNoNeo);
+
+    // Hotel portal scenario
+    const hMax = 9.6 * cpp;
+    setScenarioBarFull('scen-hotel-strata', 9.6    * cpp,         hMax, null);
+    setScenarioBarFull('scen-hotel-plat',   0.8    * cpp,         hMax, null);
+    setScenarioBarFull('scen-hotel-cent',   0.9175 * cpp + 0.5,  hMax, hCentNoNeo);
+
+    // Restaurant scenario
+    const rMax = 2.4 * cpp;
+    setScenarioBarFull('scen-rest-strata', 2.4    * cpp,         rMax, null);
+    setScenarioBarFull('scen-rest-plat',   0.8    * cpp,         rMax, null);
+    setScenarioBarFull('scen-rest-cent',   0.9175 * cpp + 0.5,  rMax, rCentNoNeo);
+
+    // Update Ultima USD bar widths in all scenarios (value is fixed 4.13, just need width relative to scenario max)
+    updateUltimaScenWidth('.scen-flight-ultima-usd', 4.13, fMax);
+    updateUltimaScenWidth('.scen-hotel-ultima-usd',  4.13, hMax);
+    updateUltimaScenWidth('.scen-rest-ultima-usd',   4.13, rMax);
   }
 
-  function setBar(id, val, max) {
+  function setScenarioBarFull(id, val, max, noNeoVal) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const fill = el.closest('.scenario-bar-row')?.querySelector('.scenario-bar-fill');
+    if (fill) fill.style.width = Math.max(3, (val / max * 100)).toFixed(1) + '%';
+    if (noNeoVal !== null) {
+      el.innerHTML = val.toFixed(1) + '%<span class="sub-val">(' + noNeoVal + '%)</span>';
+    } else {
+      el.textContent = val.toFixed(1) + '%';
+    }
+  }
+
+  function updateUltimaScenWidth(selector, val, max) {
+    const fills = document.querySelectorAll(selector + ' .scenario-bar-fill');
+    fills.forEach(f => f.style.width = Math.max(3, (val / max * 100)).toFixed(1) + '%');
+  }
+
+  function setBar(id, val, max, subVal) {
     const pct = (val / max * 100).toFixed(0);
     document.getElementById('bar-' + id).style.width = pct + '%';
-    document.getElementById('num-' + id).textContent = val + '%';
+    const el = document.getElementById('num-' + id);
+    if (subVal !== undefined) {
+      el.innerHTML = val + '%<span class="sub-val">(' + subVal + '%)</span>';
+    } else {
+      el.textContent = val + '%';
+    }
   }
 
   // Init

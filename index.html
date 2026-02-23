@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Credit Card Optimizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #C9A84C;
+    --gold-light: #E8C96A;
+    --gold-dim: #8A6E2F;
+    --bg: #0A0A0A;
+    --bg2: #111111;
+    --bg3: #191919;
+    --bg4: #222222;
+    --border: #2A2A2A;
+    --border-gold: rgba(201,168,76,0.3);
+    --text: #E8E4DC;
+    --text-dim: #888;
+    --text-muted: #555;
+    --green: #4CAF7A;
+    --red: #E06060;
+    --blue: #5B9BD5;
+    --amex-blue: #2E77BC;
+    --citi-red: #C8102E;
+    --amex-gold: #C9A84C;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  .header {
+    background: linear-gradient(180deg, #0E0C08 0%, var(--bg) 100%);
+    border-bottom: 1px solid var(--border-gold);
+    padding: 24px 20px 20px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+
+  .version {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.1em;
+  }
+
+  .header-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 26px;
+    font-weight: 300;
+    color: var(--text);
+    line-height: 1.2;
+    margin-bottom: 4px;
+  }
+
+  .header-title span { color: var(--gold); }
+
+  .header-subtitle {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* NAV */
+  .nav {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    border-top: 1px solid var(--border);
+    margin-top: 14px;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+
+  .nav-btn {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-family: 'Syne', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .nav-btn.active {
+    color: var(--gold);
+    border-bottom-color: var(--gold);
+  }
+
+  .nav-btn:hover { color: var(--text); }
+
+  /* SECTIONS */
+  .section { display: none; padding: 20px; }
+  .section.active { display: block; }
+
+  /* CARDS */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .card-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .card-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .card-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  .card-subtitle { font-size: 10px; color: var(--text-muted); }
+
+  .chevron {
+    color: var(--text-muted);
+    font-size: 16px;
+    transition: transform 0.25s;
+  }
+
+  .card.open .chevron { transform: rotate(180deg); }
+
+  .card-body {
+    display: none;
+    padding: 0 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .card.open .card-body { display: block; }
+
+  /* PILL BADGES */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+  .badge-gold { background: rgba(201,168,76,0.15); color: var(--gold); border: 1px solid var(--border-gold); }
+  .badge-green { background: rgba(76,175,122,0.12); color: var(--green); border: 1px solid rgba(76,175,122,0.2); }
+  .badge-red { background: rgba(224,96,96,0.12); color: var(--red); border: 1px solid rgba(224,96,96,0.2); }
+  .badge-blue { background: rgba(91,155,213,0.12); color: var(--blue); border: 1px solid rgba(91,155,213,0.2); }
+
+  /* DATA ROW */
+  .data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+  }
+  .data-row:last-child { border-bottom: none; }
+  .data-label { color: var(--text-dim); font-size: 11px; flex: 1; }
+  .data-value { font-weight: 500; font-size: 12px; text-align: right; }
+  .data-value.gold { color: var(--gold); }
+  .data-value.green { color: var(--green); }
+  .data-value.red { color: var(--red); }
+
+  /* HIGHLIGHT BOX */
+  .highlight {
+    background: rgba(201,168,76,0.06);
+    border: 1px solid var(--border-gold);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin: 12px 0;
+  }
+  .highlight-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+  .highlight p { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+
+  /* MULTIPLIER TABLE */
+  .mult-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+  .mult-table th {
+    font-family: 'Syne', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 8px 6px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .mult-table td {
+    padding: 10px 6px;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    vertical-align: top;
+  }
+  .mult-table tr:last-child td { border-bottom: none; }
+  .mult-table .winner { background: rgba(201,168,76,0.05); }
+  .mult-table .cat { color: var(--text-dim); }
+  .mult-table .rate { color: var(--gold); font-weight: 500; font-family: 'DM Mono', monospace; }
+  .mult-table .ret { color: var(--green); font-family: 'DM Mono', monospace; }
+
+  /* DECISION TOOL */
+  .decision-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .decision-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .decision-btn:hover, .decision-btn.selected {
+    border-color: var(--gold);
+    background: rgba(201,168,76,0.08);
+  }
+
+  .decision-btn .emoji { font-size: 20px; display: block; margin-bottom: 4px; }
+  .decision-btn .label { font-size: 10px; color: var(--text-dim); font-family: 'Syne', sans-serif; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  .decision-result {
+    background: var(--bg3);
+    border: 1px solid var(--border-gold);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: none;
+  }
+  .decision-result.show { display: block; }
+
+  .result-card-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--gold);
+    margin-bottom: 4px;
+  }
+
+  .result-reason { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+  .result-alt { font-size: 11px; color: var(--text-muted); }
+
+  /* CREDITS CALENDAR */
+  .period-header {
+    font-family: 'Syne', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    padding: 10px 0 6px;
+    border-bottom: 1px solid var(--border-gold);
+    margin-bottom: 4px;
+  }
+
+  .credit-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .credit-item:last-child { border-bottom: none; }
+
+  .credit-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .credit-info { flex: 1; }
+  .credit-name { font-size: 12px; color: var(--text); }
+  .credit-card-tag { font-size: 10px; color: var(--text-muted); }
+  .credit-amount { font-family: 'DM Mono', monospace; color: var(--green); font-size: 13px; font-weight: 500; }
+
+  .total-credits {
+    background: rgba(76,175,122,0.08);
+    border: 1px solid rgba(76,175,122,0.2);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+  }
+  .total-credits-label { font-family: 'Syne', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--green); }
+  .total-credits-amount { font-family: 'DM Mono', monospace; font-size: 18px; color: var(--green); }
+
+  /* PORTFOLIO ECONOMICS */
+  .economics-card {
+    background: var(--bg3);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .economics-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+  }
+  .economics-card.positive::before { background: var(--green); }
+  .economics-card.negative::before { background: var(--red); }
+  .economics-card.warning::before { background: var(--gold); }
+
+  .econ-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .econ-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .econ-fee { font-size: 11px; color: var(--text-muted); }
+  .econ-net { font-family: 'DM Mono', monospace; font-size: 15px; }
+  .econ-net.pos { color: var(--green); }
+  .econ-net.neg { color: var(--red); }
+
+  .econ-breakdown { font-size: 11px; color: var(--text-muted); }
+  .econ-breakdown span { color: var(--text-dim); }
+
+  /* QUICK CHEAT */
+  .cheat-item {
+    display: flex;
+    align-items: center;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+  .cheat-item:last-child { border-bottom: none; }
+
+  .cheat-scenario { flex: 1; font-size: 12px; color: var(--text-dim); }
+  .cheat-answer {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* TIPS */
+  .tip {
+    background: var(--bg3);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    border-left: 3px solid var(--gold);
+  }
+  .tip-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .tip p { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+  .tip strong { color: var(--text); }
+
+  /* SECTION TITLE */
+  .section-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 22px;
+    font-weight: 300;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .section-title span { color: var(--gold); }
+  .section-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    letter-spacing: 0.05em;
+  }
+
+  /* PROPERTY CALLOUT */
+  .property-box {
+    background: linear-gradient(135deg, rgba(201,168,76,0.08) 0%, rgba(201,168,76,0.03) 100%);
+    border: 1px solid var(--border-gold);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin: 12px 0;
+  }
+  .property-box .big-num {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 36px;
+    font-weight: 600;
+    color: var(--gold);
+    line-height: 1;
+  }
+  .property-box .big-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 8px; }
+
+  /* RANGE SLIDER */
+  .slider-section { padding: 12px 0; }
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .slider-value { color: var(--gold); font-family: 'DM Mono', monospace; }
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 2px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    margin-bottom: 12px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--gold);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 8px rgba(201,168,76,0.4);
+  }
+
+  .rate-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .rate-bar-label { width: 100px; font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+  .rate-bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--bg4);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+  .rate-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s ease;
+  }
+  .rate-bar-num { width: 40px; text-align: right; font-family: 'DM Mono', monospace; font-size: 11px; }
+
+  /* TRANSFER BONUS */
+  .transfer-highlight {
+    background: rgba(91,155,213,0.08);
+    border: 1px solid rgba(91,155,213,0.2);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin: 8px 0;
+  }
+
+  /* FOOTER */
+  .footer {
+    text-align: center;
+    padding: 30px 20px;
+    font-size: 10px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    letter-spacing: 0.1em;
+  }
+  .footer span { color: var(--gold); }
+
+  /* PULSE ANIMATION */
+  @keyframes pulse-gold {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  .pulse { animation: pulse-gold 2s infinite; }
+
+  /* FADE IN */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .section.active > * { animation: fadeUp 0.3s ease forwards; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* BREAKEVEN TABLE */
+  .breakeven-row {
+    display: flex;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+  }
+  .breakeven-row:last-child { border-bottom: none; }
+  .breakeven-spend { color: var(--gold); font-family: 'DM Mono', monospace; font-size: 13px; min-width: 70px; }
+  .breakeven-savings { color: var(--green); font-family: 'DM Mono', monospace; font-size: 12px; min-width: 60px; }
+  .breakeven-verdict { font-size: 11px; color: var(--text-dim); }
+
+  /* KEY INSIGHT BANNER */
+  .insight-banner {
+    background: linear-gradient(135deg, #0E0C08 0%, #141208 100%);
+    border: 1px solid var(--border-gold);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .insight-banner::after {
+    content: '★';
+    position: absolute;
+    right: -10px;
+    top: -10px;
+    font-size: 80px;
+    color: rgba(201,168,76,0.04);
+    pointer-events: none;
+  }
+  .insight-banner .insight-tag {
+    font-family: 'Syne', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .insight-banner p { font-size: 12px; color: var(--text-dim); line-height: 1.7; }
+  .insight-banner strong { color: var(--text); }
+
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="logo">Credit Optimizer</div>
+    </div>
+    <div class="version">v3.0 — Feb 2026</div>
+  </div>
+  <div class="header-title">Emirates <span>Skywards</span><br>Maximizer</div>
+  <div class="header-subtitle">1 USD = 3.67 AED · Miles: 3–7 cpp</div>
+
+  <nav class="nav">
+    <button class="nav-btn active" onclick="showSection('decide')">Decide</button>
+    <button class="nav-btn" onclick="showSection('multipliers')">Multipliers</button>
+    <button class="nav-btn" onclick="showSection('credits')">Credits</button>
+    <button class="nav-btn" onclick="showSection('cards')">Cards</button>
+    <button class="nav-btn" onclick="showSection('portfolio')">Portfolio</button>
+    <button class="nav-btn" onclick="showSection('strategy')">Strategy</button>
+    <button class="nav-btn" onclick="showSection('tips')">Tips</button>
+  </nav>
+</div>
+
+<!-- ============ DECIDE ============ -->
+<div id="decide" class="section active">
+  <div class="section-title">Quick <span>Decide</span></div>
+  <div class="section-desc">Tap what you're buying — get the right card instantly</div>
+
+  <div class="decision-grid">
+    <div class="decision-btn" onclick="decide('emirates-biz')">
+      <span class="emoji">✈️</span>
+      <span class="label">Emirates Biz</span>
+    </div>
+    <div class="decision-btn" onclick="decide('flight-credit')">
+      <span class="emoji">🎫</span>
+      <span class="label">Flight 4k+ AED</span>
+    </div>
+    <div class="decision-btn" onclick="decide('flight-portal')">
+      <span class="emoji">🖥️</span>
+      <span class="label">Flight via Portal</span>
+    </div>
+    <div class="decision-btn" onclick="decide('flight-direct')">
+      <span class="emoji">🛫</span>
+      <span class="label">Flight Direct</span>
+    </div>
+    <div class="decision-btn" onclick="decide('hotel-3plus')">
+      <span class="emoji">🏨</span>
+      <span class="label">Hotel 3+ Nights</span>
+    </div>
+    <div class="decision-btn" onclick="decide('hotel-short')">
+      <span class="emoji">🛏️</span>
+      <span class="label">Hotel 1-2 Nights</span>
+    </div>
+    <div class="decision-btn" onclick="decide('hotel-luxury')">
+      <span class="emoji">👑</span>
+      <span class="label">Luxury Hotel</span>
+    </div>
+    <div class="decision-btn" onclick="decide('restaurant')">
+      <span class="emoji">🍽️</span>
+      <span class="label">Restaurant</span>
+    </div>
+    <div class="decision-btn" onclick="decide('lululemon')">
+      <span class="emoji">🏃</span>
+      <span class="label">Lululemon</span>
+    </div>
+    <div class="decision-btn" onclick="decide('bestbuy')">
+      <span class="emoji">🛍️</span>
+      <span class="label">Best Buy</span>
+    </div>
+    <div class="decision-btn" onclick="decide('property')">
+      <span class="emoji">🏠</span>
+      <span class="label">Property Instalment</span>
+    </div>
+    <div class="decision-btn" onclick="decide('general')">
+      <span class="emoji">💳</span>
+      <span class="label">Everything Else</span>
+    </div>
+  </div>
+
+  <div class="decision-result" id="decision-result">
+    <div class="result-card-name" id="result-card"></div>
+    <div class="result-reason" id="result-reason"></div>
+    <div class="result-alt" id="result-alt"></div>
+  </div>
+
+  <div class="highlight mt-16">
+    <div class="highlight-title">⚡ Key Insight</div>
+    <p>Base rates across all 4 cards fall within a <strong style="color:var(--text)">~1% band</strong>. On $50k spend, best vs worst base card is only <strong style="color:var(--text)">~$455/yr</strong>. The real money is in multipliers, credits, and structural benefits.</p>
+  </div>
+</div>
+
+<!-- ============ MULTIPLIERS ============ -->
+<div id="multipliers" class="section">
+  <div class="section-title">Earn <span>Multipliers</span></div>
+  <div class="section-desc">Where the real value is — route every major purchase here</div>
+
+  <div class="insight-banner">
+    <div class="insight-tag">🏆 King of Multipliers</div>
+    <p>Strata Elite 12x hotels returns <strong>38.4%</strong> at 4 cpp — 8× the best base rate. A single $1,000 hotel booking through Citi portal = <strong>9,600 Skywards = $384 in value.</strong></p>
+  </div>
+
+  <table class="mult-table">
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Card</th>
+        <th>Pts/$</th>
+        <th style="color:var(--green)">Return</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="winner">
+        <td class="cat">Hotels (portal)</td>
+        <td><span class="badge badge-blue">Strata</span></td>
+        <td class="rate">12x</td>
+        <td class="ret">38.4%</td>
+      </tr>
+      <tr class="winner">
+        <td class="cat">Flights (portal)</td>
+        <td><span class="badge badge-blue">Strata</span></td>
+        <td class="rate">6x</td>
+        <td class="ret">19.2%</td>
+      </tr>
+      <tr>
+        <td class="cat">Flights direct</td>
+        <td><span class="badge badge-gold">AMEX Plat</span></td>
+        <td class="rate">5x</td>
+        <td class="ret">16.0%</td>
+      </tr>
+      <tr>
+        <td class="cat">Restaurants</td>
+        <td><span class="badge badge-blue">Strata</span></td>
+        <td class="rate">3x</td>
+        <td class="ret">9.6%</td>
+      </tr>
+      <tr>
+        <td class="cat">Emirates Biz</td>
+        <td><span class="badge badge-gold">Centurion</span></td>
+        <td class="rate">10% off</td>
+        <td class="ret">~10%</td>
+      </tr>
+      <tr>
+        <td class="cat">Hotel 3rd night</td>
+        <td><span class="badge" style="background:rgba(224,96,96,0.12);color:var(--red);border:1px solid rgba(224,96,96,0.2)">Ultima</span></td>
+        <td class="rate">free</td>
+        <td class="ret">33%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="highlight mt-12">
+    <div class="highlight-title">✦ Portal vs Direct — Hotels</div>
+    <p>At 4 cpp, the 12x portal has a <strong style="color:var(--text)">33.6% buffer</strong> over 1.5x direct. Portal can be up to ~33% more expensive and still break even. Almost always use portal for hotels.</p>
+  </div>
+
+  <div class="highlight mt-8">
+    <div class="highlight-title">✦ Portal vs Direct — Flights</div>
+    <p>6x portal (19.2%) vs 5x direct (16.0%) — gap is tighter. Portal can be ~15–20% more before direct wins. Always price-check both.</p>
+  </div>
+
+  <div class="section-title mt-16" style="font-size:16px">Base Rates <span>Comparison</span></div>
+  <div class="section-desc">Interactive — adjust mile valuation</div>
+
+  <div class="slider-section">
+    <div class="slider-label">
+      <span>Mile value (cpp)</span>
+      <span class="slider-value" id="cpp-display">4.0 cpp</span>
+    </div>
+    <input type="range" min="3" max="7" step="0.5" value="4" oninput="updateRates(this.value)">
+
+    <div class="rate-bar-row">
+      <div class="rate-bar-label">Strata Elite</div>
+      <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-strata" style="background:var(--blue)"></div></div>
+      <div class="rate-bar-num rate" id="num-strata" style="color:var(--blue)"></div>
+    </div>
+    <div class="rate-bar-row">
+      <div class="rate-bar-label">Centurion</div>
+      <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-centurion" style="background:var(--gold)"></div></div>
+      <div class="rate-bar-num" id="num-centurion" style="color:var(--gold)"></div>
+    </div>
+    <div class="rate-bar-row">
+      <div class="rate-bar-label">Ultima</div>
+      <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-ultima" style="background:var(--red)"></div></div>
+      <div class="rate-bar-num" id="num-ultima" style="color:var(--red)"></div>
+    </div>
+    <div class="rate-bar-row">
+      <div class="rate-bar-label">AMEX Plat</div>
+      <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-plat" style="background:var(--text-muted)"></div></div>
+      <div class="rate-bar-num" id="num-plat" style="color:var(--text-dim)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CREDITS ============ -->
+<div id="credits" class="section">
+  <div class="section-title">Credits <span>Calendar</span></div>
+  <div class="section-desc">Miss a quarter and you lose value permanently</div>
+
+  <div class="period-header">⟳ Quarterly Credits</div>
+  <div class="credit-item">
+    <div class="credit-dot" style="background:var(--amex-gold)"></div>
+    <div class="credit-info">
+      <div class="credit-name">Lululemon Credit</div>
+      <div class="credit-card-tag">AMEX Platinum · Q1 Mar31 · Q2 Jun30 · Q3 Sep30 · Q4 Dec31</div>
+    </div>
+    <div class="credit-amount">$75</div>
+  </div>
+  <div class="credit-item">
+    <div class="credit-dot" style="background:var(--amex-gold)"></div>
+    <div class="credit-info">
+      <div class="credit-name">Resy Restaurant Credit</div>
+      <div class="credit-card-tag">AMEX Platinum · Buy US gift cards · Same deadlines</div>
+    </div>
+    <div class="credit-amount">$100</div>
+  </div>
+
+  <div class="period-header mt-12">⟳ Semi-Annual Credits</div>
+  <div class="credit-item">
+    <div class="credit-dot" style="background:var(--amex-gold)"></div>
+    <div class="credit-info">
+      <div class="credit-name">Hotel Credit (AMEX Portal)</div>
+      <div class="credit-card-tag">AMEX Platinum · H1 Jun30 · H2 Dec31</div>
+    </div>
+    <div class="credit-amount">$300</div>
+  </div>
+  <div class="credit-item">
+    <div class="credit-dot" style="background:var(--blue)"></div>
+    <div class="credit-info">
+      <div class="credit-name">Blacklane Airport Transfers</div>
+      <div class="credit-card-tag">Strata Elite · H1 Jun30 · H2 Dec31</div>
+    </div>
+    <div class="credit-amount">$100</div>
+  </div>
+
+  <div class="period-header mt-12">★ Annual Credits</div>
+  <div class="credit-item">
+    <div class="credit-dot" style="background:var(--amex-gold)"></div>
+    <div class="credit-info">
+      <div class="credit-name">United Airlines Travel Bank</div>
+      <div class="credit-card-tag">AMEX Platinum · Fund travel bank (5yr expiry)</div>
+    </div>
+    <div class="credit-amount">$200</div>
+  </div>
+  <div class="credit-item">
+    <div class="credit-dot" style="background:var(--blue)"></div>
+    <div class="credit-info">
+      <div class="credit-name">Best Buy Gift Cards</div>
+      <div class="credit-card-tag">Strata Elite · Brands you use</div>
+    </div>
+    <div class="credit-amount">$200</div>
+  </div>
+  <div class="credit-item">
+    <div class="credit-dot" style="background:var(--blue)"></div>
+    <div class="credit-info">
+      <div class="credit-name">Hotel Credit (Citi Portal)</div>
+      <div class="credit-card-tag">Strata Elite · Stack with 12x earning!</div>
+    </div>
+    <div class="credit-amount">$300</div>
+  </div>
+  <div class="credit-item">
+    <div class="credit-dot" style="background:var(--red)"></div>
+    <div class="credit-info">
+      <div class="credit-name">Flight Credit (4k+ AED)</div>
+      <div class="credit-card-tag">Ultima · Once per year, any airline</div>
+    </div>
+    <div class="credit-amount">2,000 AED</div>
+  </div>
+
+  <div class="total-credits">
+    <div class="total-credits-label">Annual Credit Value</div>
+    <div class="total-credits-amount">~$2,600 + 2k AED</div>
+  </div>
+
+  <div class="highlight mt-12">
+    <div class="highlight-title">💡 Strata 12x Stacking</div>
+    <p>Use $300 Strata hotel credit via Citi portal. You get the credit AND 12x points. On $300: credit + 3,600 TYP (2,880 Skywards ≈ $115 at 4cpp) = <strong style="color:var(--text)">$415 total value</strong>.</p>
+  </div>
+</div>
+
+<!-- ============ CARDS ============ -->
+<div id="cards" class="section">
+  <div class="section-title">Your <span>Four Cards</span></div>
+  <div class="section-desc">Tap any card to expand details</div>
+
+  <!-- AMEX Platinum -->
+  <div class="card" onclick="toggleCard(this)">
+    <div class="card-header">
+      <div class="card-header-left">
+        <div class="card-icon" style="background:rgba(201,168,76,0.1)">💳</div>
+        <div>
+          <div class="card-title" style="color:var(--gold)">AMEX Platinum USA</div>
+          <div class="card-subtitle">$895/yr · No FX fees</div>
+        </div>
+      </div>
+      <div class="chevron">▾</div>
+    </div>
+    <div class="card-body">
+      <div class="data-row"><div class="data-label">General spend</div><div class="data-value">1x MR → 0.8 Skywards/$</div></div>
+      <div class="data-row"><div class="data-label">Flights (direct/portal)</div><div class="data-value gold">5x MR → 4.0 Skywards/$</div></div>
+      <div class="data-row"><div class="data-label">Transfer rate</div><div class="data-value">1,000 MR = 800 Skywards</div></div>
+      <div class="data-row"><div class="data-label">FX fees</div><div class="data-value green">None</div></div>
+      <div class="data-row"><div class="data-label">Annual credits value</div><div class="data-value green">~$1,500</div></div>
+      <div class="data-row"><div class="data-label">Net cost after credits</div><div class="data-value green">+$605 profit</div></div>
+      <div class="highlight mt-8">
+        <div class="highlight-title">Credits Breakdown</div>
+        <p>$75 Lululemon × 4 = $300<br>$100 Resy × 4 = $400<br>$300 Hotel × 2 = $600<br>$200 United = $200<br>Total = <strong style="color:var(--text)">$1,500</strong></p>
+      </div>
+      <div class="badge badge-gold mt-8">Primary role: Credits + direct airline bookings</div>
+    </div>
+  </div>
+
+  <!-- Strata Elite -->
+  <div class="card" onclick="toggleCard(this)">
+    <div class="card-header">
+      <div class="card-header-left">
+        <div class="card-icon" style="background:rgba(91,155,213,0.1)">💳</div>
+        <div>
+          <div class="card-title" style="color:var(--blue)">Citi Strata Elite USA</div>
+          <div class="card-subtitle">$595/yr · No FX fees</div>
+        </div>
+      </div>
+      <div class="chevron">▾</div>
+    </div>
+    <div class="card-body">
+      <div class="data-row"><div class="data-label">General spend</div><div class="data-value">1.5x TYP → 1.2 Skywards/$</div></div>
+      <div class="data-row"><div class="data-label">Restaurants</div><div class="data-value">3x TYP → 2.4 Skywards/$</div></div>
+      <div class="data-row"><div class="data-label">Flights (Citi portal)</div><div class="data-value gold">6x TYP → 4.8 Skywards/$</div></div>
+      <div class="data-row"><div class="data-label">Hotels (Citi portal)</div><div class="data-value gold">12x TYP → 9.6 Skywards/$</div></div>
+      <div class="data-row"><div class="data-label">Transfer rate</div><div class="data-value">1,000 TYP = 800 Skywards</div></div>
+      <div class="data-row"><div class="data-label">Annual credits value</div><div class="data-value green">~$700</div></div>
+      <div class="data-row"><div class="data-label">Net cost after credits</div><div class="data-value green">+$105 profit</div></div>
+      <div class="property-box mt-8">
+        <div class="big-label">Property Instalment Engine</div>
+        <div class="big-num">196k</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Skywards miles/yr from ~600k AED instalments</div>
+        <div style="font-size:12px;color:var(--gold);margin-top:4px">≈ $7,800+ in value at 4 cpp</div>
+      </div>
+      <div class="badge badge-blue">Primary role: Default card for almost everything</div>
+    </div>
+  </div>
+
+  <!-- Ultima -->
+  <div class="card" onclick="toggleCard(this)">
+    <div class="card-header">
+      <div class="card-header-left">
+        <div class="card-icon" style="background:rgba(224,96,96,0.1)">💳</div>
+        <div>
+          <div class="card-title" style="color:var(--red)">Citi Ultima UAE</div>
+          <div class="card-subtitle">3,000 AED/yr (~$818) · 3% FX abroad</div>
+        </div>
+      </div>
+      <div class="chevron">▾</div>
+    </div>
+    <div class="card-body">
+      <div class="data-row"><div class="data-label">Domestic AED spend</div><div class="data-value">2.5pts / 4 AED</div></div>
+      <div class="data-row"><div class="data-label">Foreign USD spend</div><div class="data-value gold">5pts / 1 USD (3% FX fee)</div></div>
+      <div class="data-row"><div class="data-label">Redemption</div><div class="data-value">20pts = 1 AED vs travel</div></div>
+      <div class="data-row"><div class="data-label">3rd night free</div><div class="data-value green">Unlimited, worldwide</div></div>
+      <div class="data-row"><div class="data-label">Flight credit</div><div class="data-value gold">2,000 AED on 4k+ AED flight</div></div>
+      <div class="data-row"><div class="data-label">Net cost after credits</div><div class="data-value red">-$273/yr</div></div>
+      <div class="highlight mt-8">
+        <div class="highlight-title">🏨 3rd Night Free Strategy</div>
+        <p>For midrange hotels, rotate every 3 nights — easy savings. For luxury/resort (e.g., Banyan Tree Kyoto, Park Hyatt), use Strata 12x after first 3 nights instead to protect status benefits.</p>
+      </div>
+      <div class="badge badge-red mt-8">Primary role: Hotels 3+ nights + annual flight credit</div>
+    </div>
+  </div>
+
+  <!-- Centurion -->
+  <div class="card" onclick="toggleCard(this)">
+    <div class="card-header">
+      <div class="card-header-left">
+        <div class="card-icon" style="background:rgba(201,168,76,0.1)">⬛</div>
+        <div>
+          <div class="card-title" style="color:var(--gold)">AMEX Centurion UAE</div>
+          <div class="card-subtitle">15,000 AED/yr (~$4,090)</div>
+        </div>
+      </div>
+      <div class="chevron">▾</div>
+    </div>
+    <div class="card-body">
+      <div class="data-row"><div class="data-label">Earning rate</div><div class="data-value">2pts / 4 AED</div></div>
+      <div class="data-row"><div class="data-label">Redemption</div><div class="data-value">2pts = 1 Skyward</div></div>
+      <div class="data-row"><div class="data-label">Emirates Biz discount</div><div class="data-value gold">10% off premium cabins</div></div>
+      <div class="data-row"><div class="data-label">Soft perks</div><div class="data-value">Hotel status, concierge, FHR</div></div>
+      <div class="data-row"><div class="data-label">Net cost after credits</div><div class="data-value red">-$3,690+</div></div>
+      <div class="section-title mt-12" style="font-size:15px">Breakeven <span>Analysis</span></div>
+      <div class="breakeven-row">
+        <div class="breakeven-spend">$10k</div>
+        <div class="breakeven-savings">$1,000</div>
+        <div class="breakeven-verdict">No — still -$2,690 deficit</div>
+      </div>
+      <div class="breakeven-row">
+        <div class="breakeven-spend">$20k</div>
+        <div class="breakeven-savings">$2,000</div>
+        <div class="breakeven-verdict">No — still -$1,690 deficit</div>
+      </div>
+      <div class="breakeven-row">
+        <div class="breakeven-spend">$30k</div>
+        <div class="breakeven-savings">$3,000</div>
+        <div class="breakeven-verdict">Close — only -$690 deficit</div>
+      </div>
+      <div class="breakeven-row" style="background:rgba(76,175,122,0.05)">
+        <div class="breakeven-spend" style="color:var(--green)">$37k+</div>
+        <div class="breakeven-savings">$3,700</div>
+        <div class="breakeven-verdict" style="color:var(--green)">✓ Breakeven reached!</div>
+      </div>
+      <div class="highlight mt-12">
+        <div class="highlight-title">⚠️ Day-to-Day Spend Warning</div>
+        <p>Do NOT use Centurion for everyday AED. At 4 cpp it returns 4.18% vs Strata's 4.80%. Use exclusively for Emirates Biz bookings, promo multipliers, and soft perks.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PORTFOLIO ============ -->
+<div id="portfolio" class="section">
+  <div class="section-title">Portfolio <span>Economics</span></div>
+  <div class="section-desc">Annual fee vs credits value analysis</div>
+
+  <div class="economics-card positive">
+    <div class="econ-header">
+      <div>
+        <div class="econ-name">AMEX Platinum USA</div>
+        <div class="econ-fee">$895/yr fee · ~$1,500 credits</div>
+      </div>
+      <div class="econ-net pos">+$605</div>
+    </div>
+    <div class="econ-breakdown"><span>Credits: $300 Lulu + $400 Resy + $600 Hotel + $200 United</span></div>
+  </div>
+
+  <div class="economics-card positive">
+    <div class="econ-header">
+      <div>
+        <div class="econ-name">Citi Strata Elite USA</div>
+        <div class="econ-fee">$595/yr fee · ~$700 credits</div>
+      </div>
+      <div class="econ-net pos">+$105</div>
+    </div>
+    <div class="econ-breakdown"><span>Credits: $200 BestBuy + $300 Hotel + $200 Blacklane</span><br>+ biggest miles engine via property instalments</div>
+  </div>
+
+  <div class="economics-card warning">
+    <div class="econ-header">
+      <div>
+        <div class="econ-name">Citi Ultima UAE</div>
+        <div class="econ-fee">3,000 AED/yr (~$818) · ~2,000 AED credits</div>
+      </div>
+      <div class="econ-net neg">-$273</div>
+    </div>
+    <div class="econ-breakdown"><span>Credits: 2,000 AED flight credit (~$545)</span><br>Justified by 3rd night free — 1 hotel stay/yr covers gap</div>
+  </div>
+
+  <div class="economics-card negative">
+    <div class="econ-header">
+      <div>
+        <div class="econ-name">AMEX Centurion UAE</div>
+        <div class="econ-fee">15,000 AED/yr (~$4,090)</div>
+      </div>
+      <div class="econ-net neg">-$3,690+</div>
+    </div>
+    <div class="econ-breakdown"><span>Quantifiable credits: ~$400</span><br>Requires $37k+ Emirates Biz spend to justify via 10% discount alone</div>
+  </div>
+
+  <div class="section-title mt-16" style="font-size:16px">$50k Spend <span>Comparison</span></div>
+  <div class="section-desc">Base rate returns at 4 cpp</div>
+
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+    <div class="cheat-item">
+      <div class="cheat-scenario">Strata Elite</div>
+      <div class="cheat-answer" style="color:var(--blue)">4.80% · $2,400</div>
+    </div>
+    <div class="cheat-item">
+      <div class="cheat-scenario">Centurion + neobank</div>
+      <div class="cheat-answer" style="color:var(--gold)">4.18% · $2,090</div>
+    </div>
+    <div class="cheat-item">
+      <div class="cheat-scenario">Ultima + neobank</div>
+      <div class="cheat-answer" style="color:var(--red)">3.89% · $1,945</div>
+    </div>
+    <div class="cheat-item">
+      <div class="cheat-scenario">AMEX Platinum</div>
+      <div class="cheat-answer" style="color:var(--text-muted)">3.20% · $1,600</div>
+    </div>
+  </div>
+
+  <div class="transfer-highlight mt-12">
+    <div style="font-family:'Syne',sans-serif;font-size:10px;font-weight:700;letter-spacing:0.2em;color:var(--blue);margin-bottom:6px;">🔵 NEOBANK CASHBACK LAYER</div>
+    <div class="data-row" style="border-color:rgba(91,155,213,0.15)"><div class="data-label">Until April 2026</div><div class="data-value" style="color:var(--blue)">1.0% on UAE card bills</div></div>
+    <div class="data-row" style="border-color:rgba(91,155,213,0.15)"><div class="data-label">After April 2026</div><div class="data-value">0.5% on UAE card bills</div></div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px">Maximize UAE bill payments through neobank before rate drops in April.</div>
+  </div>
+</div>
+
+<!-- ============ STRATEGY ============ -->
+<div id="strategy" class="section">
+  <div class="section-title">Premium Cabin <span>Strategy</span></div>
+  <div class="section-desc">DXB-GRU and long-haul optimization</div>
+
+  <div class="insight-banner">
+    <div class="insight-tag">✈️ Two-Card Combo</div>
+    <p>Step 1: Book Emirates Business via <strong>Centurion</strong> (10% off = $500–700 saved on $6k ticket).<br>Step 2: Upgrade to First using <strong>Skywards miles</strong> at 6–7 cpp redemption value.</p>
+  </div>
+
+  <div class="highlight">
+    <div class="highlight-title">📊 DXB-GRU Example</div>
+    <p>Business ticket ~$6,000<br>Centurion 10% = <strong style="color:var(--green)">$600 saved</strong><br>+ Upgrade Business→First with miles at 6–7 cpp<br>= exceptional value stack</p>
+  </div>
+
+  <div class="section-title mt-16" style="font-size:16px">Transfer Bonus <span>Strategy</span></div>
+  <div class="section-desc">Batch transfers during bonus windows — 2–4× per year</div>
+
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <div class="card-header-left">
+        <div class="card-icon">🎯</div>
+        <div>
+          <div class="card-title">Transfer Bonus Impact</div>
+          <div class="card-subtitle">25% bonus example</div>
+        </div>
+      </div>
+      <div class="chevron">▾</div>
+    </div>
+    <div class="card-body">
+      <div class="data-row"><div class="data-label">Standard 1.5x Strata general</div><div class="data-value">1.2 Skywards/$</div></div>
+      <div class="data-row"><div class="data-label">With 25% transfer bonus</div><div class="data-value gold">1.5 Skywards/$</div></div>
+      <div class="data-row"><div class="data-label">12x hotel + 25% bonus</div><div class="data-value green">12,000 TYP → 12,000 Skywards</div></div>
+      <div class="data-row"><div class="data-label">Normally</div><div class="data-value">12,000 TYP → 9,600 Skywards</div></div>
+      <div class="data-row"><div class="data-label">Bonus free miles per 100k pts</div><div class="data-value green">+25,000 Skywards</div></div>
+    </div>
+  </div>
+
+  <div class="section-title mt-16" style="font-size:16px">Property Instalment <span>Engine</span></div>
+  <div class="property-box">
+    <div class="big-label">Annual Skywards from ~600k AED Instalments</div>
+    <div class="big-num">196,200</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:8px">Strata Elite 1.5x · No FX fees · $7,848 at 4 cpp</div>
+    <div style="font-size:12px;color:var(--gold-light);margin-top:4px">= 2–3 Emirates First/Business upgrades/year</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px">⚠️ Protect this flow. Strata Elite must remain the property payment card.</div>
+  </div>
+
+  <div class="section-title mt-16" style="font-size:16px">Hotel Booking <span>Framework</span></div>
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+    <div class="cheat-item"><div class="cheat-scenario">3 nights</div><div class="cheat-answer" style="color:var(--red)">Ultima (3rd night free)</div></div>
+    <div class="cheat-item"><div class="cheat-scenario">4–5 nights</div><div class="cheat-answer" style="color:var(--red)">Ultima (3) + Strata 12x (1–2)</div></div>
+    <div class="cheat-item"><div class="cheat-scenario">6 nights</div><div class="cheat-answer" style="color:var(--red)">Ultima ×2 — 2 free nights</div></div>
+    <div class="cheat-item"><div class="cheat-scenario">7–9 nights</div><div class="cheat-answer" style="color:var(--red)">Ultima ×2–3 + Strata 12x</div></div>
+    <div class="cheat-item"><div class="cheat-scenario">1–2 nights</div><div class="cheat-answer" style="color:var(--blue)">Strata Elite (12x portal)</div></div>
+    <div class="cheat-item"><div class="cheat-scenario">Luxury / status matters</div><div class="cheat-answer" style="color:var(--gold)">Centurion (FHR/status)</div></div>
+  </div>
+</div>
+
+<!-- ============ TIPS ============ -->
+<div id="tips" class="section">
+  <div class="section-title">Pro <span>Tips</span></div>
+  <div class="section-desc">Power moves to extract maximum value</div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 01 — Transfer Batching</div>
+    <p>Hold points and batch transfers during <strong>20–30% bonus windows</strong> (2–4× per year). A 25% bonus on 100,000 points = 25,000 free Skywards miles.</p>
+  </div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 02 — Portal Price Check</div>
+    <p>For hotels, 12x portal wins even at <strong>30–40% premium</strong>. For flights, 6x advantage is slimmer — price-check if premium exceeds 15–20%.</p>
+  </div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 03 — 12x Credit Stacking</div>
+    <p>Book $300 Strata hotel credit through Citi portal: <strong>$300 credit + 3,600 TYP (≈$115) = $415 total value</strong> on $300 spend.</p>
+  </div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 04 — United Travel Bank</div>
+    <p>Credits expire 5 years from deposit. <strong>Track expiration dates</strong> and burn down when transiting through the US. Don't let them lapse.</p>
+  </div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 05 — Centurion Promos</div>
+    <p>Watch for <strong>8x multiplier promotions</strong> — temporarily boost Centurion to ~3.67 miles/$. Still below Strata portal rates but competitive for general spend.</p>
+  </div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 06 — CPP Determines AED Card</div>
+    <p>At <strong>6–7 cpp</strong> (Emirates upgrades), Strata at 8.4% is unbeatable. At 3 cpp or below, Ultima + neobank at 3.89%+ is safer.</p>
+  </div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 07 — Neobank Deadline</div>
+    <p><strong>1% cashback drops to 0.5% after April 2026</strong>. Maximize UAE card bill payments through neobank before the rate change.</p>
+  </div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 08 — Ultima Hotel Rotation</div>
+    <p>Midrange city hotels: rotate every 3 nights easily for 33% savings. Luxury/resort stays: <strong>use Strata 12x after first 3 nights</strong> if loyalty matters.</p>
+  </div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 09 — Breakeven Points</div>
+    <p>Ultima vs Strata breakeven: <strong>3.24 cpp</strong>. Below this, Ultima's fixed cashback wins. Above, Strata dominates. Centurion vs Strata: Strata wins at ALL reasonable valuations.</p>
+  </div>
+
+  <div class="highlight mt-8">
+    <div class="highlight-title">⚡ Quick Cheat Sheet</div>
+    <p>
+      <strong style="color:var(--text)">Emirates Biz flight</strong> → Centurion (10% off)<br>
+      <strong style="color:var(--text)">Flight 4k+ AED (credit unused)</strong> → Ultima<br>
+      <strong style="color:var(--text)">Any flight via portal</strong> → Strata 6x<br>
+      <strong style="color:var(--text)">Flight direct, non-Emirates</strong> → AMEX Plat 5x<br>
+      <strong style="color:var(--text)">Hotel 3+ nights</strong> → Ultima (3rd free)<br>
+      <strong style="color:var(--text)">Hotel 1–2 nights</strong> → Strata 12x portal<br>
+      <strong style="color:var(--text)">Restaurants</strong> → Strata 3x<br>
+      <strong style="color:var(--text)">Lululemon</strong> → AMEX Plat ($75 quarterly)<br>
+      <strong style="color:var(--text)">Best Buy</strong> → Strata ($200 annual)<br>
+      <strong style="color:var(--text)">Everything else</strong> → Strata 1.5x
+    </p>
+  </div>
+</div>
+
+<div class="footer">
+  Generated <span>February 2026</span> · FX: 1 USD = <span>3.67 AED</span><br>
+  Citi Ultima rate: 1 AED = 0.271 USD · Mile value: <span>3–7 cpp</span>
+</div>
+
+<script>
+  function showSection(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    event.target.classList.add('active');
+    window.scrollTo(0, 0);
+  }
+
+  function toggleCard(el) {
+    el.classList.toggle('open');
+  }
+
+  const decisions = {
+    'emirates-biz': {
+      card: '⬛ AMEX Centurion UAE',
+      reason: '10% discount on Emirates Business premium cabins. On a $6,000 ticket = $600 saved instantly.',
+      alt: 'After booking: upgrade to First using Skywards miles at 6–7 cpp for maximum value stack.'
+    },
+    'flight-credit': {
+      card: '🔴 Citi Ultima UAE (if annual credit unused)',
+      reason: '2,000 AED statement credit on any flight 4,000+ AED. Once per year — effectively ~50% back on a 4k AED flight.',
+      alt: 'After using the credit: Strata Elite 6x portal for remaining flights.'
+    },
+    'flight-portal': {
+      card: '🔵 Citi Strata Elite',
+      reason: '6x TY Points via Citi portal = 4.8 Skywards per $1 = 19.2% return at 4 cpp.',
+      alt: 'Price-check vs AMEX Plat direct booking if portal premium >15–20%.'
+    },
+    'flight-direct': {
+      card: '🟡 AMEX Platinum USA',
+      reason: '5x MR on flights booked directly = 4.0 Skywards per $1 = 16.0% at 4 cpp.',
+      alt: 'Compare Strata 6x portal price — portal wins unless 15%+ more expensive.'
+    },
+    'hotel-3plus': {
+      card: '🔴 Citi Ultima UAE',
+      reason: '3rd night free = 33% effective discount. Almost always beats any earn rate on 3+ night stays.',
+      alt: 'For 4–5 nights: use Ultima for first 3, then Strata 12x for remaining nights.'
+    },
+    'hotel-short': {
+      card: '🔵 Citi Strata Elite (12x Citi Portal)',
+      reason: '12x TY Points via Citi portal = 9.6 Skywards per $1 = 38.4% return at 4 cpp. Unbeatable.',
+      alt: 'Portal can be 30–40% more expensive and still break even vs booking direct.'
+    },
+    'hotel-luxury': {
+      card: '⬛ AMEX Centurion UAE',
+      reason: 'FHR benefits, hotel status, upgrades, late checkout, and property credits at luxury properties.',
+      alt: 'If status benefits don\'t apply, use Strata Elite 12x portal instead.'
+    },
+    'restaurant': {
+      card: '🔵 Citi Strata Elite',
+      reason: '3x TY Points = 2.4 Skywards per $1 = 9.6% return at 4 cpp. Beats all other cards globally.',
+      alt: 'No FX fees — use everywhere, US, UAE, or abroad.'
+    },
+    'lululemon': {
+      card: '🟡 AMEX Platinum USA',
+      reason: '$75 quarterly Lululemon credit — use it or lose it each quarter (Mar31, Jun30, Sep30, Dec31).',
+      alt: 'Can also buy gift cards to use later.'
+    },
+    'bestbuy': {
+      card: '🔵 Citi Strata Elite',
+      reason: '$200 annual Best Buy credit. Buy gift cards for brands you use — great way to extract value.',
+      alt: 'Combine with Strata base 1.5x earning for the full benefit.'
+    },
+    'property': {
+      card: '🔵 Citi Strata Elite',
+      reason: '1.5x TY Points on all spend, no FX fees. ~600k AED/yr = 196,200 Skywards = $7,848+ at 4 cpp.',
+      alt: 'This is your biggest miles engine. Protect it — always use Strata for property instalments.'
+    },
+    'general': {
+      card: '🔵 Citi Strata Elite',
+      reason: '1.5x TY Points = 1.2 Skywards/$1 = 4.8% return at 4 cpp. Best base rate in portfolio.',
+      alt: 'No FX fees. Works in USD and AED. Default for anything without a better multiplier.'
+    }
+  };
+
+  function decide(type) {
+    document.querySelectorAll('.decision-btn').forEach(b => b.classList.remove('selected'));
+    event.currentTarget.classList.add('selected');
+    const d = decisions[type];
+    document.getElementById('result-card').textContent = d.card;
+    document.getElementById('result-reason').textContent = d.reason;
+    document.getElementById('result-alt').textContent = d.alt;
+    document.getElementById('decision-result').classList.add('show');
+    document.getElementById('decision-result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function updateRates(cpp) {
+    cpp = parseFloat(cpp);
+    document.getElementById('cpp-display').textContent = cpp.toFixed(1) + ' cpp';
+    
+    // Base Skywards per $1 (general spend, no multipliers)
+    const rates = {
+      strata: 1.2,   // 1.5x * 0.8 conversion
+      centurion: 0.92, // 2pt per 4 AED → 0.5 per AED * 3.67/4 USD = 0.5 * 0.917 = 0.46 skywards per AED → ~0.92 per USD + 0.5% neobank
+      ultima: null,  // fixed AED return, not CPP dependent above 3.24
+      plat: 0.8,     // 1x * 0.8 conversion
+    };
+    
+    // Returns
+    const straRet = (rates.strata * cpp / 100 * 100).toFixed(1);
+    const cenRet = (rates.centurion * cpp / 100 * 100 + 0.5).toFixed(1); // include neobank post-april
+    const ultRet = 3.89; // fixed
+    const platRet = (rates.plat * cpp / 100 * 100).toFixed(1);
+
+    const max = Math.max(parseFloat(straRet), parseFloat(cenRet), ultRet, parseFloat(platRet));
+
+    setBar('strata', straRet, max);
+    setBar('centurion', cenRet, max);
+    setBar('ultima', ultRet.toFixed(1), max);
+    setBar('plat', platRet, max);
+  }
+
+  function setBar(id, val, max) {
+    const pct = (val / max * 100).toFixed(0);
+    document.getElementById('bar-' + id).style.width = pct + '%';
+    document.getElementById('num-' + id).textContent = val + '%';
+  }
+
+  // Init
+  updateRates(4);
+</script>
+</body>
+</html>

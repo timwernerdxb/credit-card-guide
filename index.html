@@ -794,14 +794,23 @@
       <div class="rate-bar-num" id="num-centurion" style="color:var(--gold)"></div>
     </div>
     <div class="rate-bar-row">
-      <div class="rate-bar-label">Ultima</div>
+      <div class="rate-bar-label">Ultima (AED)</div>
       <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-ultima" style="background:var(--red)"></div></div>
       <div class="rate-bar-num" id="num-ultima" style="color:var(--red)"></div>
+    </div>
+    <div class="rate-bar-row">
+      <div class="rate-bar-label">Ultima (USD)</div>
+      <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-ultima-intl" style="background:#E08060"></div></div>
+      <div class="rate-bar-num" id="num-ultima-intl" style="color:#E08060"></div>
     </div>
     <div class="rate-bar-row">
       <div class="rate-bar-label">AMEX Plat</div>
       <div class="rate-bar-track"><div class="rate-bar-fill" id="bar-plat" style="background:var(--text-muted)"></div></div>
       <div class="rate-bar-num" id="num-plat" style="color:var(--text-dim)"></div>
+    </div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:8px;padding:8px;background:var(--bg3);border-radius:6px;line-height:1.7">
+      <span style="color:var(--red)">★ Both Ultima bars are fixed</span> — redeems at 20 pts = 1 AED (fixed cash value), so cpp doesn't affect them.<br>
+      <span style="color:var(--red)">Ultima AED</span> = domestic spend (2.5pts/4 AED) · <span style="color:#E08060">Ultima USD</span> = international (5pts/$1 – 3% FX fee)
     </div>
   </div>
 </div>
@@ -967,8 +976,9 @@
       <div class="chevron">▾</div>
     </div>
     <div class="card-body">
-      <div class="data-row"><div class="data-label">Domestic AED spend</div><div class="data-value">2.5pts / 4 AED</div></div>
-      <div class="data-row"><div class="data-label">Foreign USD spend</div><div class="data-value gold">5pts / 1 USD (3% FX fee)</div></div>
+      <div class="data-row"><div class="data-label">Domestic AED spend</div><div class="data-value">2.5pts / 4 AED → <span style="color:var(--red)">3.89%</span></div></div>
+      <div class="data-row"><div class="data-label">International USD spend</div><div class="data-value">5pts / $1 – 3% FX → <span style="color:#E08060">4.28%</span></div></div>
+      <div class="data-row"><div class="data-label">Both rates are</div><div class="data-value" style="color:var(--text-muted)">fixed — cpp irrelevant</div></div>
       <div class="data-row"><div class="data-label">Redemption</div><div class="data-value">20pts = 1 AED vs travel</div></div>
       <div class="data-row"><div class="data-label">3rd night free</div><div class="data-value green">Unlimited, worldwide</div></div>
       <div class="data-row"><div class="data-label">Flight credit</div><div class="data-value gold">2,000 AED on 4k+ AED flight</div></div>
@@ -1090,8 +1100,12 @@
       <div class="cheat-answer" style="color:var(--gold)">4.18% · $2,090</div>
     </div>
     <div class="cheat-item">
-      <div class="cheat-scenario">Ultima + neobank</div>
-      <div class="cheat-answer" style="color:var(--red)">3.89% · $1,945</div>
+      <div class="cheat-scenario">Ultima (AED domestic)</div>
+      <div class="cheat-answer" style="color:var(--red)">3.89% · $1,945 <span style="color:var(--text-muted);font-size:10px">(fixed)</span></div>
+    </div>
+    <div class="cheat-item">
+      <div class="cheat-scenario">Ultima (USD intl)</div>
+      <div class="cheat-answer" style="color:#E08060">4.28% · $2,140 <span style="color:var(--text-muted);font-size:10px">(fixed)</span></div>
     </div>
     <div class="cheat-item">
       <div class="cheat-scenario">AMEX Platinum</div>
@@ -1330,24 +1344,30 @@
     
     // Base Skywards per $1 (general spend, no multipliers)
     const rates = {
-      strata: 1.2,   // 1.5x * 0.8 conversion
-      centurion: 0.92, // 2pt per 4 AED → 0.5 per AED * 3.67/4 USD = 0.5 * 0.917 = 0.46 skywards per AED → ~0.92 per USD + 0.5% neobank
-      ultima: null,  // fixed AED return, not CPP dependent above 3.24
-      plat: 0.8,     // 1x * 0.8 conversion
+      strata: 1.2,    // 1.5x * 0.8 conversion
+      centurion: 0.92, // ~0.46 skywards per AED * 2 (USD) + 0.5% neobank baked in
+      plat: 0.8,      // 1x * 0.8 conversion
     };
     
-    // Returns
-    const straRet = (rates.strata * cpp / 100 * 100).toFixed(1);
-    const cenRet = (rates.centurion * cpp / 100 * 100 + 0.5).toFixed(1); // include neobank post-april
-    const ultRet = 3.89; // fixed
-    const platRet = (rates.plat * cpp / 100 * 100).toFixed(1);
+    // Strata: CPP-dependent
+    const straRet = (rates.strata * cpp).toFixed(2);
+    // Centurion: CPP-dependent + 0.5% neobank
+    const cenRet  = (rates.centurion * cpp + 0.5).toFixed(2);
+    // AMEX Plat: CPP-dependent
+    const platRet = (rates.plat * cpp).toFixed(2);
 
-    const max = Math.max(parseFloat(straRet), parseFloat(cenRet), ultRet, parseFloat(platRet));
+    // Ultima AED domestic: FIXED — 2.5pts/4AED, 20pts=1AED=0.271USD → 3.39% + 0.5% neobank
+    const ultAED  = 3.89;
+    // Ultima USD international: FIXED — 5pts/$1, 20pts=0.271USD → 6.775% – 3% FX + 0.5% neobank
+    const ultUSD  = 4.28;
 
-    setBar('strata', straRet, max);
-    setBar('centurion', cenRet, max);
-    setBar('ultima', ultRet.toFixed(1), max);
-    setBar('plat', platRet, max);
+    const max = Math.max(parseFloat(straRet), parseFloat(cenRet), ultAED, ultUSD, parseFloat(platRet));
+
+    setBar('strata',       straRet,          max);
+    setBar('centurion',    cenRet,           max);
+    setBar('ultima',       ultAED.toFixed(2), max);
+    setBar('ultima-intl',  ultUSD.toFixed(2), max);
+    setBar('plat',         platRet,          max);
   }
 
   function setBar(id, val, max) {

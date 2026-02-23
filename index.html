@@ -755,6 +755,18 @@
         <td class="ret">~26%</td>
       </tr>
       <tr>
+        <td class="cat">Ultima (AED domestic)</td>
+        <td><span class="badge" style="background:rgba(224,96,96,0.12);color:var(--red);border:1px solid rgba(224,96,96,0.2)">Ultima</span></td>
+        <td class="rate">fixed</td>
+        <td class="ret">3.89%</td>
+      </tr>
+      <tr>
+        <td class="cat">Ultima (USD intl)</td>
+        <td><span class="badge" style="background:rgba(224,128,96,0.12);color:#E08060;border:1px solid rgba(224,128,96,0.2)">Ultima</span></td>
+        <td class="rate">5pts/$1</td>
+        <td class="ret">4.13%</td>
+      </tr>
+      <tr>
         <td class="cat">Hotel 3rd night</td>
         <td><span class="badge" style="background:rgba(224,96,96,0.12);color:var(--red);border:1px solid rgba(224,96,96,0.2)">Ultima</span></td>
         <td class="rate">free</td>
@@ -977,7 +989,8 @@
     </div>
     <div class="card-body">
       <div class="data-row"><div class="data-label">Domestic AED spend</div><div class="data-value">2.5pts / 4 AED → <span style="color:var(--red)">3.89%</span></div></div>
-      <div class="data-row"><div class="data-label">International USD spend</div><div class="data-value">5pts / $1 – 3% FX → <span style="color:#E08060">4.28%</span></div></div>
+      <div class="data-row"><div class="data-label">International USD spend</div><div class="data-value">5pts / $1 – 3.15% FX* → <span style="color:#E08060">4.13%</span></div></div>
+      <div class="data-row"><div class="data-label">* FX fee</div><div class="data-value" style="color:var(--text-muted)">3% + 5% VAT = 3.15% effective</div></div>
       <div class="data-row"><div class="data-label">Both rates are</div><div class="data-value" style="color:var(--text-muted)">fixed — cpp irrelevant</div></div>
       <div class="data-row"><div class="data-label">Redemption</div><div class="data-value">20pts = 1 AED vs travel</div></div>
       <div class="data-row"><div class="data-label">3rd night free</div><div class="data-value green">Unlimited, worldwide</div></div>
@@ -1105,7 +1118,7 @@
     </div>
     <div class="cheat-item">
       <div class="cheat-scenario">Ultima (USD intl)</div>
-      <div class="cheat-answer" style="color:#E08060">4.28% · $2,140 <span style="color:var(--text-muted);font-size:10px">(fixed)</span></div>
+      <div class="cheat-answer" style="color:#E08060">4.13% · $2,065 <span style="color:var(--text-muted);font-size:10px">(fixed)</span></div>
     </div>
     <div class="cheat-item">
       <div class="cheat-scenario">AMEX Platinum</div>
@@ -1358,8 +1371,8 @@
 
     // Ultima AED domestic: FIXED — 2.5pts/4AED, 20pts=1AED=0.271USD → 3.39% + 0.5% neobank
     const ultAED  = 3.89;
-    // Ultima USD international: FIXED — 5pts/$1, 20pts=0.271USD → 6.775% – 3% FX + 0.5% neobank
-    const ultUSD  = 4.28;
+    // Ultima USD international: FIXED — 5pts/$1, 20pts=0.271USD → 6.775% – 3.15% effective FX (3% + 5% VAT) + 0.5% neobank
+    const ultUSD  = 4.13;
 
     const max = Math.max(parseFloat(straRet), parseFloat(cenRet), ultAED, ultUSD, parseFloat(platRet));
 

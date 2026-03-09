@@ -839,6 +839,14 @@
       <span class="emoji">🛍️</span>
       <span class="label">Best Buy</span>
     </div>
+    <div class="decision-btn" onclick="decide('marriott')">
+      <span class="emoji">🏩</span>
+      <span class="label">Marriott Hotel</span>
+    </div>
+    <div class="decision-btn" onclick="decide('airport-transfer')">
+      <span class="emoji">🚗</span>
+      <span class="label">Airport Transfer</span>
+    </div>
     <div class="decision-btn" onclick="decide('property')">
       <span class="emoji">🏠</span>
       <span class="label">Property Instalment</span>
@@ -922,6 +930,12 @@
         <td><span class="badge" style="background:rgba(224,128,96,0.12);color:#E08060;border:1px solid rgba(224,128,96,0.2)">Ultima</span></td>
         <td class="rate">5pts/$1</td>
         <td class="ret">4.13%</td>
+      </tr>
+      <tr>
+        <td class="cat">Marriott hotels</td>
+        <td><span class="badge" style="background:rgba(201,168,76,0.12);color:var(--gold);border:1px solid rgba(201,168,76,0.2)">Centurion</span></td>
+        <td class="rate">2x MR</td>
+        <td class="ret">~4pts/$ in MR</td>
       </tr>
       <tr>
         <td class="cat">Hotel 3rd night</td>
@@ -1108,6 +1122,14 @@
     </div>
     <div class="credit-amount">$100</div>
   </div>
+  <div class="credit-item">
+    <div class="credit-dot" style="background:var(--gold)"></div>
+    <div class="credit-info">
+      <div class="credit-name">Blacklane Transfers + Meet & Greet</div>
+      <div class="credit-card-tag">Centurion · Free to/from airport · Arrival meet & greet</div>
+    </div>
+    <div class="credit-amount">Free</div>
+  </div>
 
   <div class="period-header mt-12">★ Annual Credits</div>
   <div class="credit-item">
@@ -1260,7 +1282,9 @@
     <div class="card-body">
       <div class="data-row"><div class="data-label">Earning rate</div><div class="data-value">2pts / 4 AED</div></div>
       <div class="data-row"><div class="data-label">Redemption</div><div class="data-value">2pts = 1 Skyward</div></div>
+      <div class="data-row"><div class="data-label">Marriott earning</div><div class="data-value gold">2x Bonvoy pts + 2 MR/$</div></div>
       <div class="data-row"><div class="data-label">Emirates Biz discount</div><div class="data-value gold">10% off premium cabins</div></div>
+      <div class="data-row"><div class="data-label">Airport transfers</div><div class="data-value gold">Free Blacklane + meet & greet</div></div>
       <div class="data-row"><div class="data-label">Soft perks</div><div class="data-value">Hotel status, concierge, FHR</div></div>
       <div class="data-row"><div class="data-label">Net cost after credits</div><div class="data-value red">-$3,690+</div></div>
       <div class="section-title mt-12" style="font-size:15px">Breakeven <span>Analysis</span></div>
@@ -1338,7 +1362,7 @@
       </div>
       <div class="econ-net neg">-$3,690+</div>
     </div>
-    <div class="econ-breakdown"><span>Quantifiable credits: ~$400</span><br>Requires $37k+ Emirates Biz spend to justify via 10% discount alone</div>
+    <div class="econ-breakdown"><span>Quantifiable credits: ~$400 + free Blacklane transfers</span><br>Marriott 2x Bonvoy + 2 MR double-dip · Requires $37k+ Emirates Biz spend to justify via 10% discount alone</div>
   </div>
 
   <div class="section-title mt-16" style="font-size:16px">$50k Spend <span>Comparison</span></div>
@@ -1479,7 +1503,17 @@
   </div>
 
   <div class="tip">
-    <div class="tip-num">Tip 09 — Breakeven Points</div>
+    <div class="tip-num">Tip 09 — Centurion Marriott Double-Dip</div>
+    <p>Pay for Marriott stays with Centurion: earn <strong>2x Marriott Bonvoy points + 2 MR</strong> per dollar. You get hotel loyalty points AND Membership Rewards — a true double-dip that no other card in the portfolio offers.</p>
+  </div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 10 — Centurion Airport Transfers</div>
+    <p>Centurion includes <strong>free Blacklane transfers to and from the airport</strong> plus a meet & greet service on arrival. Save the Strata $200/yr Blacklane credit for non-airport rides.</p>
+  </div>
+
+  <div class="tip">
+    <div class="tip-num">Tip 11 — Breakeven Points</div>
     <p>Ultima vs Strata breakeven: <strong>3.24 cpp</strong>. Below this, Ultima's fixed cashback wins. Above, Strata dominates. Centurion vs Strata: Strata wins at ALL reasonable valuations.</p>
   </div>
 
@@ -1495,6 +1529,8 @@
       <strong style="color:var(--text)">Restaurants</strong> → Strata 3x<br>
       <strong style="color:var(--text)">Lululemon</strong> → AMEX Plat ($75 quarterly)<br>
       <strong style="color:var(--text)">Best Buy</strong> → Strata ($200 annual)<br>
+      <strong style="color:var(--text)">Marriott hotel</strong> → Centurion (2x Bonvoy + 2 MR)<br>
+      <strong style="color:var(--text)">Airport transfer</strong> → Centurion (free Blacklane + meet & greet)<br>
       <strong style="color:var(--text)">Everything else</strong> → Strata 1.5x
     </p>
   </div>
@@ -1568,6 +1604,16 @@
       card: '🔵 Citi Strata Elite',
       reason: '$200 annual Best Buy credit. Buy gift cards for brands you use — great way to extract value.',
       alt: 'Combine with Strata base 1.5x earning for the full benefit.'
+    },
+    'marriott': {
+      card: '⬛ AMEX Centurion UAE',
+      reason: 'Centurion earns 2x Marriott Bonvoy points + 2 MR per dollar at Marriott properties. Double-dip: hotel loyalty points AND Membership Rewards.',
+      alt: 'For 3+ night Marriott stays, still consider Ultima for 3rd night free — then switch to Centurion for remaining nights.'
+    },
+    'airport-transfer': {
+      card: '⬛ AMEX Centurion UAE',
+      reason: 'Free Blacklane airport transfers (to and from airport) plus meet & greet service on arrival. No need to pay — it\'s a complimentary Centurion perk.',
+      alt: 'Strata Elite also has $200/yr Blacklane credit ($100/half). Use Centurion for the free transfers, Strata credit for other Blacklane rides.'
     },
     'property': {
       card: '🔵 Citi Strata Elite',

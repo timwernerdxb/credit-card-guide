@@ -1,56 +1,58 @@
 # Polymarket Trading Bot
 
-Automated trading bot for Polymarket prediction markets. Deploys on Railway.
+Automated trading bot for Polymarket prediction markets using the official `@polymarket/clob-client` SDK. Deploys on Railway.
 
-## Setup
+## Deploy to Railway
 
-### 1. Deploy to Railway
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub Repo**
+2. Select `timwernerdxb/polymarket-bot`
+3. Set root directory to `/` (it's the whole repo)
+4. Go to **Variables** tab and add:
 
-- Connect this repo to [Railway](https://railway.app)
-- Set root directory to `polymarket-bot`
+| Variable | Required | Description |
+|---|---|---|
+| `PRIVATE_KEY` | Yes | Your Polygon wallet private key (the one connected to Polymarket) |
+| `FUNDER_ADDRESS` | Yes | Your Polymarket deposit address |
+| `SIGNATURE_TYPE` | No | `0` for MetaMask/browser wallet, `1` for email/Magic login (default: 0) |
+| `TRADE_AMOUNT_USDC` | No | USDC per trade (default: 10) |
+| `MAX_POSITION_USDC` | No | Max per position (default: 100) |
+| `MAX_OPEN_POSITIONS` | No | Max simultaneous bets (default: 5) |
+| `MIN_EDGE` | No | Minimum edge threshold (default: 0.05 = 5%) |
+| `STRATEGY` | No | `value` or `spread` (default: value) |
 
-### 2. Set Environment Variables on Railway
+5. Deploy
 
-| Variable | Description |
-|---|---|
-| `POLY_API_KEY` | Your Polymarket CLOB API key |
-| `POLY_API_SECRET` | Your Polymarket CLOB API secret |
-| `POLY_PASSPHRASE` | Your Polymarket CLOB API passphrase |
-| `TRADE_AMOUNT_USDC` | Amount per trade in USDC (default: 10) |
-| `MAX_POSITION_USDC` | Max size per position (default: 100) |
-| `MAX_OPEN_POSITIONS` | Max simultaneous positions (default: 5) |
-| `MIN_EDGE` | Minimum edge to take a trade (default: 0.05 = 5%) |
-| `STRATEGY` | `value` or `spread` (default: value) |
+## How to Get Your Private Key
 
-### 3. Get API Keys
+Your private key is the key for the wallet you use on Polymarket:
 
-1. Go to [polymarket.com](https://polymarket.com)
-2. Connect your wallet
-3. Go to Settings → API Keys
-4. Generate CLOB API credentials
+- **MetaMask**: Settings → Security & Privacy → Reveal Secret Recovery Phrase (or export private key for the specific account)
+- **Email login (Magic)**: You may need to export from Polymarket settings
 
-### 4. Fund Account
+Set `SIGNATURE_TYPE=0` for MetaMask, `SIGNATURE_TYPE=1` for email login.
 
-Deposit USDC to your Polymarket account on Polygon network.
+## How to Get Your Funder Address
+
+This is your Polymarket profile/deposit address on Polygon. Find it in your Polymarket account settings or wallet.
 
 ## Strategies
 
 ### Value (`STRATEGY=value`)
-Scans for markets where one outcome is underpriced relative to volume and liquidity signals. Buys undervalued outcomes and sells at +15% profit or -20% stop loss.
+Scans for underpriced outcomes in high-volume markets. Buys when estimated edge > MIN_EDGE. Auto-sells at +15% profit or -20% stop loss.
 
 ### Spread (`STRATEGY=spread`)
 Market-makes by placing limit orders around the midpoint in liquid markets, capturing the bid-ask spread.
 
 ## Dashboard
 
-The bot exposes a web dashboard on the Railway-assigned port showing:
-- P&L, positions, trade log
-- Manual scan/rebalance/start/stop controls
+The bot serves a live web dashboard showing:
+- P&L, open positions, trade log
+- Manual scan / rebalance / start / stop controls
 
-## API Endpoints
+## API
 
-- `GET /api/status` — Current bot state
+- `GET /api/status` — Bot state
 - `POST /api/scan` — Trigger market scan
-- `POST /api/rebalance` — Trigger position rebalance
-- `POST /api/start` — Start trading loops
-- `POST /api/stop` — Stop trading loops
+- `POST /api/rebalance` — Rebalance positions
+- `POST /api/start` — Start trading
+- `POST /api/stop` — Stop trading

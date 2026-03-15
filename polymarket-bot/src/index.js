@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const config = require('./config');
+const api = require('./api');
 const strategy = require('./strategy');
 
 const app = express();
@@ -39,8 +40,7 @@ app.post('/api/rebalance', async (req, res) => {
 });
 
 app.post('/api/stop', (req, res) => {
-  clearInterval(scanTimer);
-  clearInterval(rebalanceTimer);
+  stopTimers();
   console.log('[BOT] Trading stopped by user');
   res.json({ ok: true, message: 'Bot stopped' });
 });
@@ -52,7 +52,7 @@ app.post('/api/start', (req, res) => {
 });
 
 // ============================================
-// Dashboard HTML
+// Dashboard
 // ============================================
 
 app.get('/', (req, res) => {
@@ -69,45 +69,44 @@ let rebalanceTimer = null;
 function startTimers() {
   if (scanTimer) clearInterval(scanTimer);
   if (rebalanceTimer) clearInterval(rebalanceTimer);
-
   scanTimer = setInterval(() => strategy.scan(), config.scanInterval);
   rebalanceTimer = setInterval(() => strategy.rebalance(), config.rebalanceInterval);
 }
 
-function validateConfig() {
-  const missing = [];
-  if (!config.apiKey) missing.push('POLY_API_KEY');
-  if (!config.apiSecret) missing.push('POLY_API_SECRET');
-  if (!config.passphrase) missing.push('POLY_PASSPHRASE');
-
-  if (missing.length > 0) {
-    console.warn(`[BOOT] Missing env vars: ${missing.join(', ')}`);
-    console.warn('[BOOT] Bot will start in monitor-only mode. Set credentials to enable trading.');
-    return false;
-  }
-  return true;
+function stopTimers() {
+  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  if (rebalanceTimer) { clearInterval(rebalanceTimer); rebalanceTimer = null; }
 }
 
 app.listen(config.port, async () => {
   console.log('='.repeat(50));
-  console.log('  POLYMARKET TRADING BOT');
+  console.log('  POLYMARKET TRADING BOT v2.0');
+  console.log('  Using official @polymarket/clob-client SDK');
   console.log('='.repeat(50));
-  console.log(`  Dashboard: http://localhost:${config.port}`);
-  console.log(`  Strategy:  ${config.strategy}`);
+  console.log(`  Dashboard:  http://localhost:${config.port}`);
+  console.log(`  Strategy:   ${config.strategy}`);
   console.log(`  Trade size: $${config.tradeAmountUsdc}`);
   console.log(`  Max positions: ${config.maxOpenPositions}`);
-  console.log(`  Min edge: ${(config.minEdge * 100).toFixed(0)}%`);
+  console.log(`  Min edge:   ${(config.minEdge * 100).toFixed(0)}%`);
   console.log('='.repeat(50));
 
-  const ready = validateConfig();
+  if (!config.privateKey) {
+    console.log('[BOOT] No PRIVATE_KEY set. Dashboard running in monitor-only mode.');
+    console.log('[BOOT] Add PRIVATE_KEY env var on Railway to enable trading.');
+    return;
+  }
 
-  if (ready) {
-    console.log('[BOOT] Credentials found. Starting trading loops...');
+  try {
+    await api.init();
+    console.log('[BOOT] Authenticated with Polymarket CLOB API');
+
     // Initial scan
     await strategy.scan();
     // Start recurring timers
     startTimers();
-  } else {
-    console.log('[BOOT] Dashboard running. Add credentials to start trading.');
+    console.log('[BOOT] Trading loops started');
+  } catch (err) {
+    console.error('[BOOT] Failed to initialize:', err.message);
+    console.error('[BOOT] Check your PRIVATE_KEY and FUNDER_ADDRESS env vars');
   }
 });

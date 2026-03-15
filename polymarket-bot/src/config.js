@@ -1,15 +1,15 @@
 require('dotenv').config();
 
 module.exports = {
-  // API credentials
-  apiKey: process.env.POLY_API_KEY,
-  apiSecret: process.env.POLY_API_SECRET,
-  passphrase: process.env.POLY_PASSPHRASE,
-  privateKey: process.env.POLY_PRIVATE_KEY,
+  // Wallet auth
+  privateKey: process.env.PRIVATE_KEY,
+  funderAddress: process.env.FUNDER_ADDRESS,
+  signatureType: parseInt(process.env.SIGNATURE_TYPE || '0'),
 
   // Endpoints
-  clobBaseUrl: 'https://clob.polymarket.com',
+  clobHost: 'https://clob.polymarket.com',
   gammaBaseUrl: 'https://gamma-api.polymarket.com',
+  chainId: 137, // Polygon
 
   // Trading parameters
   tradeAmountUsdc: parseFloat(process.env.TRADE_AMOUNT_USDC || '10'),
@@ -22,6 +22,6 @@ module.exports = {
   port: parseInt(process.env.PORT || '3000'),
 
   // Intervals (ms)
-  scanInterval: 60 * 1000,       // scan markets every 60s
-  rebalanceInterval: 5 * 60 * 1000, // rebalance every 5 min
+  scanInterval: 60 * 1000,
+  rebalanceInterval: 5 * 60 * 1000,
 };

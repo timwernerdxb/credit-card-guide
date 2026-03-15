@@ -7,7 +7,7 @@ const config = require('./config');
 // Strategies:
 //   "value"  — Buy outcomes priced far from estimated fair value
 //              using volume-weighted signals and mean reversion
-//   "spread" — Market-make by placing bids/asks around midpoint
+//   "spread" — Market-make by placing limit orders around midpoint
 // ============================================
 
 class Strategy {
@@ -51,7 +51,6 @@ class Strategy {
             opportunities.push(signal);
           }
         } catch (err) {
-          // Skip individual market errors
           continue;
         }
       }
@@ -101,21 +100,26 @@ class Strategy {
     const noPrice = parseFloat(prices[1]);
 
     if (isNaN(yesPrice) || isNaN(noPrice)) return null;
-    if (yesPrice <= 0.02 || yesPrice >= 0.98) return null; // Skip near-resolved markets
+    if (yesPrice <= 0.02 || yesPrice >= 0.98) return null; // Skip near-resolved
+
+    const tokenIds = typeof market.clobTokenIds === 'string'
+      ? JSON.parse(market.clobTokenIds)
+      : market.clobTokenIds;
 
     return {
       id: market.id,
       conditionId: market.conditionId,
       question: market.question,
       category: market.category,
-      yesTokenId: market.clobTokenIds[0],
-      noTokenId: market.clobTokenIds[1],
+      yesTokenId: tokenIds[0],
+      noTokenId: tokenIds[1],
       yesPrice,
       noPrice,
       volume24h: parseFloat(market.volume24hr || 0),
       volumeTotal: parseFloat(market.volume || 0),
       liquidity: parseFloat(market.liquidity || 0),
       endDate: market.endDate,
+      negRisk: market.negRisk || false,
     };
   }
 
@@ -131,42 +135,29 @@ class Strategy {
   evaluateValue(market) {
     // Skip low-liquidity markets (hard to exit)
     if (market.liquidity < 10000) return null;
-
     // Skip low-volume markets (stale prices)
     if (market.volume24h < 5000) return null;
-
-    // Heuristic: high-volume markets with extreme prices tend to revert
-    // Buy "Yes" when price is low (undervalued) with high volume
-    // Buy "No" when "Yes" price is high (overvalued)
 
     const yesPrice = market.yesPrice;
     const noPrice = market.noPrice;
 
-    // Volume ratio: higher ratio = more conviction in current price
-    const volumeRatio = market.volume24h / Math.max(market.volumeTotal, 1);
-
-    // Look for value in the 0.10–0.45 and 0.55–0.90 ranges
-    // These are markets where there's a clear lean but still uncertainty
     let side = null;
     let targetPrice = null;
     let edge = 0;
 
-    // Strategy: buy the cheaper side when it's not too extreme
-    // The idea: in liquid, active markets, prices near 0.15-0.40 often
-    // offer value because the crowd overweights the favorite
+    // Buy the cheaper side in the 0.10-0.40 range for high volume markets
+    // These often offer value because the crowd overweights the favorite
     if (yesPrice >= 0.10 && yesPrice <= 0.40 && market.volume24h > 20000) {
       side = 'yes';
       targetPrice = yesPrice;
-      // Edge estimate: how much upside vs. downside
-      edge = (1 / yesPrice - 1) * 0.1; // rough expected edge
+      edge = (1 / yesPrice - 1) * 0.1;
     } else if (noPrice >= 0.10 && noPrice <= 0.40 && market.volume24h > 20000) {
       side = 'no';
       targetPrice = noPrice;
       edge = (1 / noPrice - 1) * 0.1;
     }
 
-    // Also look for mean reversion: if yes is 0.55-0.75, the "no" side
-    // at 0.25-0.45 might be underpriced
+    // Mean reversion: if yes is 0.55-0.75, the "no" side might be underpriced
     if (!side && yesPrice >= 0.55 && yesPrice <= 0.75) {
       side = 'no';
       targetPrice = noPrice;
@@ -181,9 +172,10 @@ class Strategy {
       tokenId: side === 'yes' ? market.yesTokenId : market.noTokenId,
       side,
       price: targetPrice,
-      edge: edge,
+      edge,
       liquidity: market.liquidity,
       volume24h: market.volume24h,
+      negRisk: market.negRisk,
     };
   }
 
@@ -192,13 +184,10 @@ class Strategy {
     if (market.liquidity < 50000) return null;
     if (market.volume24h < 10000) return null;
 
-    // Place limit orders slightly better than current best
     const spread = Math.abs(market.yesPrice - (1 - market.noPrice));
-    if (spread < 0.03) return null; // spread too tight, no edge
+    if (spread < 0.03) return null;
 
     const midPrice = (market.yesPrice + (1 - market.noPrice)) / 2;
-
-    // Buy the side where we can get a better price
     const side = market.yesPrice < midPrice ? 'yes' : 'no';
     const price = side === 'yes' ? market.yesPrice : market.noPrice;
 
@@ -207,30 +196,29 @@ class Strategy {
       question: market.question,
       tokenId: side === 'yes' ? market.yesTokenId : market.noTokenId,
       side,
-      price: price + 0.01, // improve by 1 cent
+      price: price + 0.01,
       edge: spread / 2,
       liquidity: market.liquidity,
       volume24h: market.volume24h,
+      negRisk: market.negRisk,
     };
   }
 
-  // ---- Execute a trade ----
+  // ---- Execute a trade via the SDK ----
   async executeTrade(opportunity) {
-    const { tokenId, side, price, question, edge } = opportunity;
+    const { tokenId, side, price, question, edge, negRisk } = opportunity;
     const amount = config.tradeAmountUsdc;
     const size = amount / price;
 
     console.log(`[TRADE] ${side.toUpperCase()} on "${question.substring(0, 60)}..." @ ${price.toFixed(3)} | edge: ${(edge * 100).toFixed(1)}% | $${amount}`);
 
     try {
-      const orderType = config.strategy === 'spread' ? 'GTC' : 'FOK';
-
-      const result = await api.placeOrder({
+      const result = await api.placeBuyOrder({
         tokenId,
         price: parseFloat(price.toFixed(2)),
         size: parseFloat(size.toFixed(2)),
-        side: 'BUY',
-        type: orderType,
+        tickSize: '0.01',
+        negRisk: negRisk || false,
       });
 
       this.stats.ordersPlaced++;
@@ -244,6 +232,7 @@ class Strategy {
         avgPrice: price,
         entryTime: new Date().toISOString(),
         edge,
+        negRisk,
       });
 
       this.totalInvested += amount;
@@ -256,7 +245,7 @@ class Strategy {
         size: size.toFixed(2),
         amount,
         edge: (edge * 100).toFixed(1) + '%',
-        orderId: result.orderID || result.id || 'unknown',
+        orderId: result.orderID || result.id || 'placed',
         status: 'filled',
       };
 
@@ -264,7 +253,7 @@ class Strategy {
       if (this.tradeLog.length > 100) this.tradeLog.pop();
       this.stats.tradesPlaced++;
 
-      console.log(`[TRADE] Order placed: ${result.orderID || JSON.stringify(result)}`);
+      console.log(`[TRADE] Order result: ${JSON.stringify(result)}`);
     } catch (err) {
       this.stats.errors++;
       console.error(`[TRADE] Failed: ${err.message}`);
@@ -290,7 +279,7 @@ class Strategy {
     for (const [tokenId, pos] of this.positions.entries()) {
       try {
         const midpoint = await api.getMidpoint(tokenId);
-        const currentPrice = parseFloat(midpoint.mid || midpoint.price || 0);
+        const currentPrice = parseFloat(midpoint.mid || midpoint || 0);
 
         if (currentPrice <= 0) continue;
 
@@ -305,12 +294,12 @@ class Strategy {
           console.log(`[REBALANCE] ${action}: Selling ${pos.side} position`);
 
           try {
-            await api.placeOrder({
+            await api.placeSellOrder({
               tokenId,
               price: parseFloat(currentPrice.toFixed(2)),
               size: parseFloat(pos.size.toFixed(2)),
-              side: 'SELL',
-              type: 'FOK',
+              tickSize: '0.01',
+              negRisk: pos.negRisk || false,
             });
 
             this.pnl += profit;
@@ -324,7 +313,7 @@ class Strategy {
               price: currentPrice,
               size: pos.size.toFixed(2),
               amount: (currentPrice * pos.size).toFixed(2),
-              edge: `${action}`,
+              edge: action,
               status: 'filled',
               pnl: `${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`,
             });

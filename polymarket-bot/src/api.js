@@ -1,54 +1,46 @@
+const { ClobClient, Side, OrderType } = require('@polymarket/clob-client');
+const { Wallet } = require('@ethersproject/wallet');
 const fetch = require('node-fetch');
-const crypto = require('crypto');
 const config = require('./config');
 
 class PolymarketAPI {
   constructor() {
-    this.clobBase = config.clobBaseUrl;
+    this.client = null;
+    this.signer = null;
     this.gammaBase = config.gammaBaseUrl;
   }
 
-  // ---- Auth headers for CLOB API ----
-  getHeaders(method, path, body = '') {
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const message = timestamp + method.toUpperCase() + path + body;
-    const signature = crypto
-      .createHmac('sha256', Buffer.from(config.apiSecret, 'base64'))
-      .update(message)
-      .digest('base64');
-
-    return {
-      'Content-Type': 'application/json',
-      'POLY-API-KEY': config.apiKey,
-      'POLY-TIMESTAMP': timestamp,
-      'POLY-SIGNATURE': signature,
-      'POLY-PASSPHRASE': config.passphrase,
-    };
-  }
-
-  // ---- Generic request ----
-  async clobRequest(method, path, body = null) {
-    const bodyStr = body ? JSON.stringify(body) : '';
-    const headers = this.getHeaders(method, path, bodyStr);
-    const url = `${this.clobBase}${path}`;
-
-    const res = await fetch(url, {
-      method,
-      headers,
-      body: body ? bodyStr : undefined,
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`CLOB ${method} ${path} failed (${res.status}): ${errText}`);
+  // ---- Initialize authenticated CLOB client ----
+  async init() {
+    if (!config.privateKey) {
+      throw new Error('PRIVATE_KEY env var is required');
     }
 
-    return res.json();
+    this.signer = new Wallet(config.privateKey);
+    console.log(`[API] Wallet address: ${this.signer.address}`);
+
+    // Create temporary client to derive API credentials
+    const tempClient = new ClobClient(config.clobHost, config.chainId, this.signer);
+    const creds = await tempClient.createOrDeriveApiKey();
+    console.log('[API] API credentials derived from wallet');
+
+    // Create fully authenticated client
+    this.client = new ClobClient(
+      config.clobHost,
+      config.chainId,
+      this.signer,
+      creds,
+      config.signatureType,
+      config.funderAddress || undefined
+    );
+
+    console.log('[API] CLOB client initialized');
+    return this;
   }
 
   // ---- Public: Fetch markets from Gamma API ----
-  async getMarkets({ limit = 100, offset = 0, closed = false } = {}) {
-    const url = `${this.gammaBase}/markets?closed=${closed}&limit=${limit}&offset=${offset}&order=volume24hr&ascending=false`;
+  async getMarkets({ limit = 100, closed = false } = {}) {
+    const url = `${this.gammaBase}/markets?closed=${closed}&limit=${limit}&order=volume24hr&ascending=false`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Gamma API error: ${res.status}`);
     return res.json();
@@ -64,53 +56,106 @@ class PolymarketAPI {
 
   // ---- CLOB: Get order book ----
   async getOrderBook(tokenId) {
-    return this.clobRequest('GET', `/book?token_id=${tokenId}`);
+    return this.client.getOrderBook(tokenId);
   }
 
-  // ---- CLOB: Get mid price ----
+  // ---- CLOB: Get midpoint price ----
   async getMidpoint(tokenId) {
-    return this.clobRequest('GET', `/midpoint?token_id=${tokenId}`);
+    return this.client.getMidpoint(tokenId);
   }
 
-  // ---- CLOB: Get spread ----
-  async getSpread(tokenId) {
-    return this.clobRequest('GET', `/spread?token_id=${tokenId}`);
+  // ---- CLOB: Get tick size for a market token ----
+  async getTickSize(tokenId) {
+    try {
+      const book = await this.client.getOrderBook(tokenId);
+      // Default tick size
+      return '0.01';
+    } catch {
+      return '0.01';
+    }
   }
 
-  // ---- CLOB: Place order ----
-  async placeOrder({ tokenId, price, size, side = 'BUY', type = 'GTC' }) {
-    return this.clobRequest('POST', '/order', {
-      tokenID: tokenId,
-      price: price,
-      size: size,
-      side: side,
-      type: type,
-    });
+  // ---- CLOB: Get neg risk flag for market ----
+  async getMarketInfo(tokenId) {
+    try {
+      return await this.client.getMarket(tokenId);
+    } catch {
+      return null;
+    }
+  }
+
+  // ---- CLOB: Place a buy order ----
+  async placeBuyOrder({ tokenId, price, size, tickSize = '0.01', negRisk = false }) {
+    const order = await this.client.createAndPostOrder(
+      {
+        tokenID: tokenId,
+        price: parseFloat(price.toFixed(2)),
+        side: Side.BUY,
+        size: parseFloat(size.toFixed(2)),
+      },
+      {
+        tickSize,
+        negRisk,
+      },
+      OrderType.GTC
+    );
+    return order;
+  }
+
+  // ---- CLOB: Place a sell order ----
+  async placeSellOrder({ tokenId, price, size, tickSize = '0.01', negRisk = false }) {
+    const order = await this.client.createAndPostOrder(
+      {
+        tokenID: tokenId,
+        price: parseFloat(price.toFixed(2)),
+        side: Side.SELL,
+        size: parseFloat(size.toFixed(2)),
+      },
+      {
+        tickSize,
+        negRisk,
+      },
+      OrderType.GTC
+    );
+    return order;
+  }
+
+  // ---- CLOB: Place a market (FOK) buy ----
+  async placeMarketBuy({ tokenId, price, size, tickSize = '0.01', negRisk = false }) {
+    const order = await this.client.createAndPostOrder(
+      {
+        tokenID: tokenId,
+        price: parseFloat(price.toFixed(2)),
+        side: Side.BUY,
+        size: parseFloat(size.toFixed(2)),
+      },
+      {
+        tickSize,
+        negRisk,
+      },
+      OrderType.FOK
+    );
+    return order;
   }
 
   // ---- CLOB: Cancel order ----
   async cancelOrder(orderId) {
-    return this.clobRequest('DELETE', `/order/${orderId}`);
+    return this.client.cancelOrder(orderId);
   }
 
   // ---- CLOB: Cancel all orders ----
   async cancelAll() {
-    return this.clobRequest('DELETE', '/orders');
+    return this.client.cancelAll();
   }
 
   // ---- CLOB: Get open orders ----
   async getOpenOrders() {
-    return this.clobRequest('GET', '/orders?open=true');
+    return this.client.getOpenOrders();
   }
 
   // ---- CLOB: Get trades ----
   async getTrades() {
-    return this.clobRequest('GET', '/trades');
-  }
-
-  // ---- CLOB: Get balance / positions ----
-  async getBalanceAllowance() {
-    return this.clobRequest('GET', '/balance-allowance');
+    return this.client.getTrades();
   }
 }
 

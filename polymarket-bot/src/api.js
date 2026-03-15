@@ -241,9 +241,12 @@ class PolymarketAPI {
   // ---- CLOB: Get balances (check if we actually hold shares) ----
   async getBalanceAllowance(tokenId) {
     try {
-      return await this.client.getBalanceAllowance({ token_id: tokenId });
+      return await this.client.getBalanceAllowance({
+        asset_type: 'CONDITIONAL',
+        token_id: tokenId,
+      });
     } catch (err) {
-      console.warn(`[API] Balance check failed: ${err.message}`);
+      console.warn(`[API] Balance check failed for ${tokenId.substring(0, 16)}...: ${err.message}`);
       return null;
     }
   }

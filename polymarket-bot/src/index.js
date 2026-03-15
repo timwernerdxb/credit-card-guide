@@ -6,10 +6,27 @@ const strategy = require('./strategy');
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ============================================
-// API Endpoints for Dashboard
+// Admin auth middleware
+// Protects control endpoints with ADMIN_KEY
+// ============================================
+
+function requireAdmin(req, res, next) {
+  const adminKey = process.env.ADMIN_KEY;
+  if (!adminKey) {
+    return res.status(403).json({ error: 'ADMIN_KEY not configured' });
+  }
+
+  const provided = req.headers['x-admin-key'] || req.query.key;
+  if (provided !== adminKey) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+// ============================================
+// Public API — read-only, no auth needed
 // ============================================
 
 app.get('/api/status', (req, res) => {
@@ -21,7 +38,11 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-app.post('/api/scan', async (req, res) => {
+// ============================================
+// Admin API — requires ADMIN_KEY
+// ============================================
+
+app.post('/api/scan', requireAdmin, async (req, res) => {
   try {
     await strategy.scan();
     res.json({ ok: true, message: 'Scan completed' });
@@ -30,7 +51,7 @@ app.post('/api/scan', async (req, res) => {
   }
 });
 
-app.post('/api/rebalance', async (req, res) => {
+app.post('/api/rebalance', requireAdmin, async (req, res) => {
   try {
     await strategy.rebalance();
     res.json({ ok: true, message: 'Rebalance completed' });
@@ -39,24 +60,34 @@ app.post('/api/rebalance', async (req, res) => {
   }
 });
 
-app.post('/api/stop', (req, res) => {
+app.post('/api/stop', requireAdmin, (req, res) => {
   stopTimers();
-  console.log('[BOT] Trading stopped by user');
+  console.log('[BOT] Trading stopped by admin');
   res.json({ ok: true, message: 'Bot stopped' });
 });
 
-app.post('/api/start', (req, res) => {
+app.post('/api/start', requireAdmin, (req, res) => {
   startTimers();
-  console.log('[BOT] Trading resumed by user');
+  console.log('[BOT] Trading resumed by admin');
   res.json({ ok: true, message: 'Bot started' });
 });
 
 // ============================================
-// Dashboard
+// Routes
 // ============================================
 
+// Public read-only dashboard (share this with friends)
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, '..', 'public', 'share.html'));
+});
+
+// Admin dashboard (requires ?key=YOUR_ADMIN_KEY)
+app.get('/admin', (req, res) => {
+  const adminKey = process.env.ADMIN_KEY;
+  if (!adminKey || req.query.key !== adminKey) {
+    return res.status(401).send('Unauthorized. Use /admin?key=YOUR_ADMIN_KEY');
+  }
+  res.sendFile(path.join(__dirname, '..', 'public', 'admin.html'));
 });
 
 // ============================================
@@ -83,7 +114,8 @@ app.listen(config.port, async () => {
   console.log('  POLYMARKET TRADING BOT v2.0');
   console.log('  Using official @polymarket/clob-client SDK');
   console.log('='.repeat(50));
-  console.log(`  Dashboard:  http://localhost:${config.port}`);
+  console.log(`  Public dashboard: http://localhost:${config.port}`);
+  console.log(`  Admin dashboard:  http://localhost:${config.port}/admin?key=YOUR_ADMIN_KEY`);
   console.log(`  Strategy:   ${config.strategy}`);
   console.log(`  Trade size: $${config.tradeAmountUsdc}`);
   console.log(`  Max positions: ${config.maxOpenPositions}`);

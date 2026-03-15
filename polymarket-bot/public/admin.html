@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Polymarket Bot — Dashboard</title>
+<title>Polymarket Bot — Admin</title>
 <style>
   :root {
     --bg: #0d1117; --bg2: #161b22; --bg3: #1c2128; --border: #30363d;
@@ -93,7 +93,7 @@
 <body>
 
 <div class="header">
-  <div class="logo"><span>Polymarket</span> Bot</div>
+  <div class="logo"><span>Polymarket</span> Bot <span style="color:var(--yellow);font-size:12px;font-weight:600">ADMIN</span></div>
   <div class="refresh-indicator">
     <div class="dot" id="liveDot"></div>
     <span id="lastUpdate">--</span>
@@ -256,23 +256,31 @@
     return d.innerHTML;
   }
 
+  // Get admin key from URL query param
+  const adminKey = new URLSearchParams(window.location.search).get('key') || '';
+
+  function adminFetch(url, opts = {}) {
+    opts.headers = { ...(opts.headers || {}), 'X-Admin-Key': adminKey };
+    return fetch(url, opts);
+  }
+
   async function triggerScan() {
-    await fetch('/api/scan', { method: 'POST' });
+    await adminFetch('/api/scan', { method: 'POST' });
     fetchStatus();
   }
 
   async function triggerRebalance() {
-    await fetch('/api/rebalance', { method: 'POST' });
+    await adminFetch('/api/rebalance', { method: 'POST' });
     fetchStatus();
   }
 
   async function stopBot() {
-    await fetch('/api/stop', { method: 'POST' });
+    await adminFetch('/api/stop', { method: 'POST' });
     document.getElementById('liveDot').style.background = 'var(--red)';
   }
 
   async function startBot() {
-    await fetch('/api/start', { method: 'POST' });
+    await adminFetch('/api/start', { method: 'POST' });
     document.getElementById('liveDot').style.background = 'var(--green)';
   }
 

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polymarket Bot — Live Performance</title>
+<style>
+  :root {
+    --bg: #0d1117; --bg2: #161b22; --bg3: #1c2128; --border: #30363d;
+    --text: #e6edf3; --dim: #8b949e; --muted: #6e7681;
+    --green: #3fb950; --red: #f85149; --blue: #58a6ff; --yellow: #d29922;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px; border-bottom: 1px solid var(--border); background: var(--bg2);
+  }
+  .logo { font-size: 20px; font-weight: 700; }
+  .logo span { color: var(--blue); }
+  .header-right {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .live-badge {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px;
+    background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3);
+    font-size: 12px; font-weight: 600; color: var(--green);
+  }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .updated { font-size: 11px; color: var(--muted); }
+
+  /* Hero stats */
+  .hero {
+    display: flex; align-items: center; justify-content: center;
+    padding: 40px 24px 20px; gap: 48px; flex-wrap: wrap;
+  }
+  .hero-stat { text-align: center; }
+  .hero-stat .label {
+    font-size: 11px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 8px;
+  }
+  .hero-stat .value { font-size: 36px; font-weight: 800; }
+  .hero-stat .value.green { color: var(--green); }
+  .hero-stat .value.red { color: var(--red); }
+  .hero-stat .sub { font-size: 12px; color: var(--dim); margin-top: 4px; }
+
+  /* Stats row */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px; padding: 0 24px 24px; max-width: 900px; margin: 0 auto;
+  }
+  .mini-stat {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; text-align: center;
+  }
+  .mini-stat .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .mini-stat .value { font-size: 20px; font-weight: 700; }
+
+  /* Sections */
+  .section {
+    margin: 0 24px 20px; background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; max-width: 1100px;
+  }
+  @media (min-width: 1148px) { .section { margin-left: auto; margin-right: auto; } }
+  .section-header {
+    padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 13px;
+    font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: left; padding: 10px 16px; color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border);
+  }
+  td { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 700;
+  }
+  .badge-yes { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-no { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge-filled { background: rgba(88,166,255,0.15); color: var(--blue); }
+  .badge-error { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  .footer {
+    text-align: center; padding: 32px; font-size: 12px; color: var(--muted);
+    border-top: 1px solid var(--border); margin-top: 20px;
+  }
+
+  @media (max-width: 600px) {
+    .hero { gap: 24px; padding: 24px 16px 16px; }
+    .hero-stat .value { font-size: 28px; }
+    .section { margin: 0 12px 16px; }
+    td, th { padding: 8px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo"><span>Polymarket</span> Bot</div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+    <span class="updated" id="lastUpdate"></span>
+  </div>
+</div>
+
+<!-- Hero P&L -->
+<div class="hero">
+  <div class="hero-stat">
+    <div class="label">Realized P&L</div>
+    <div class="value green" id="pnlValue">$0.00</div>
+  </div>
+  <div class="hero-stat">
+    <div class="label">Total Invested</div>
+    <div class="value" id="investedValue">$0.00</div>
+  </div>
+  <div class="hero-stat">
+    <div class="label">Strategy</div>
+    <div class="value" id="strategyValue" style="color:var(--blue)">--</div>
+  </div>
+</div>
+
+<!-- Mini stats -->
+<div class="stats-row">
+  <div class="mini-stat">
+    <div class="label">Open Positions</div>
+    <div class="value" id="positionsValue">0</div>
+  </div>
+  <div class="mini-stat">
+    <div class="label">Trades Placed</div>
+    <div class="value" id="tradesValue">0</div>
+  </div>
+  <div class="mini-stat">
+    <div class="label">Scans</div>
+    <div class="value" id="scansValue">0</div>
+  </div>
+  <div class="mini-stat">
+    <div class="label">Uptime</div>
+    <div class="value" id="uptimeValue">--</div>
+  </div>
+</div>
+
+<!-- Positions -->
+<div class="section">
+  <div class="section-header">
+    <span>Open Positions</span>
+    <span id="posCount" style="font-size:12px">0</span>
+  </div>
+  <div id="positionsTable"></div>
+</div>
+
+<!-- Trade Log -->
+<div class="section">
+  <div class="section-header">
+    <span>Recent Trades</span>
+    <span id="tradeCount" style="font-size:12px">0</span>
+  </div>
+  <div id="tradeLogTable"></div>
+</div>
+
+<div class="footer">
+  Auto-refreshes every 10 seconds
+</div>
+
+<script>
+  async function fetchStatus() {
+    try {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+      render(data);
+    } catch (err) {
+      console.error('Fetch failed:', err);
+    }
+  }
+
+  function formatUptime(seconds) {
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  function render(data) {
+    // P&L
+    const pnl = data.pnl || 0;
+    const pnlEl = document.getElementById('pnlValue');
+    pnlEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+    pnlEl.className = `value ${pnl >= 0 ? 'green' : 'red'}`;
+
+    document.getElementById('investedValue').textContent = `$${(data.totalInvested || 0).toFixed(2)}`;
+    document.getElementById('strategyValue').textContent = (data.config?.strategy || 'value').toUpperCase();
+    document.getElementById('positionsValue').textContent = (data.positions || []).length;
+    document.getElementById('tradesValue').textContent = data.stats?.tradesPlaced || 0;
+    document.getElementById('scansValue').textContent = data.stats?.scans || 0;
+    document.getElementById('uptimeValue').textContent = formatUptime(data.uptime || 0);
+
+    // Positions
+    const positions = data.positions || [];
+    document.getElementById('posCount').textContent = positions.length;
+    if (positions.length === 0) {
+      document.getElementById('positionsTable').innerHTML = '<div class="empty">No open positions right now</div>';
+    } else {
+      document.getElementById('positionsTable').innerHTML = `
+        <table>
+          <tr><th>Market</th><th>Side</th><th>Shares</th><th>Entry Price</th><th>Edge</th><th>Opened</th></tr>
+          ${positions.map(p => `
+            <tr>
+              <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.question)}</td>
+              <td><span class="badge badge-${p.side}">${p.side.toUpperCase()}</span></td>
+              <td>${parseFloat(p.size).toFixed(2)}</td>
+              <td>${(parseFloat(p.avgPrice) * 100).toFixed(1)}\u00a2</td>
+              <td>${(p.edge * 100).toFixed(1)}%</td>
+              <td style="color:var(--muted)">${new Date(p.entryTime).toLocaleString()}</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+
+    // Trade log
+    const trades = data.tradeLog || [];
+    document.getElementById('tradeCount').textContent = trades.length;
+    if (trades.length === 0) {
+      document.getElementById('tradeLogTable').innerHTML = '<div class="empty">No trades yet</div>';
+    } else {
+      document.getElementById('tradeLogTable').innerHTML = `
+        <table>
+          <tr><th>Time</th><th>Market</th><th>Side</th><th>Price</th><th>Amount</th><th>Status</th></tr>
+          ${trades.map(t => `
+            <tr>
+              <td style="color:var(--muted);white-space:nowrap">${new Date(t.time).toLocaleString()}</td>
+              <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.question)}</td>
+              <td><span class="badge badge-${(t.side||'').includes('yes') ? 'yes' : 'no'}">${(t.side||'').toUpperCase()}</span></td>
+              <td>${(parseFloat(t.price) * 100).toFixed(1)}\u00a2</td>
+              <td>$${parseFloat(t.amount).toFixed(2)}</td>
+              <td><span class="badge badge-${t.status}">${t.status}${t.pnl ? ' ' + t.pnl : ''}</span></td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+
+    document.getElementById('lastUpdate').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  }
+
+  function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  fetchStatus();
+  setInterval(fetchStatus, 10000);
+</script>
+</body>
+</html>

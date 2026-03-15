@@ -147,14 +147,23 @@ class PolymarketAPI {
     return Math.max(0.01, Math.min(0.99, parseFloat(price.toFixed(2))));
   }
 
-  // ---- Round size so maker amount (price*size) has ≤ 2 decimals ----
+  // ---- Round size so maker amount (price*size) has ≤ 2 decimals, taker ≤ 4 decimals ----
   _roundSize(price, size) {
-    // Taker amount (size/shares) max 4 decimals
-    // Maker amount (price*size = cost) max 2 decimals
-    let s = Math.floor(size * 10000) / 10000; // 4 decimal taker
-    // Ensure maker amount has ≤ 2 decimals by adjusting size
-    const cost = parseFloat((price * s).toFixed(2));
-    s = parseFloat((cost / price).toFixed(4));
+    // Work in raw units to avoid floating point issues
+    // USDC has 6 decimals: $1 = 1000000 raw
+    // Maker amount (cost = price * size in $) must have max 2 decimals → raw must be multiple of 10000
+    // Taker amount (size in shares) must have max 4 decimals → raw must be multiple of 100
+    //
+    // Strategy: round size DOWN so that price * size has exactly 2 decimal places
+    const cost2d = Math.floor(price * size * 100) / 100; // cost with 2 decimals
+    const s = Math.floor((cost2d / price) * 10000) / 10000; // size with 4 decimals
+    // Verify: cost should now be clean 2 decimals
+    const verifiedCost = Math.round(price * s * 100) / 100;
+    // If still not clean, reduce size further
+    if (Math.abs(price * s - verifiedCost) > 0.00001) {
+      const s2 = Math.floor(size * 100) / 100; // fallback: 2 decimal size
+      return Math.max(0.01, s2);
+    }
     return Math.max(0.01, s);
   }
 

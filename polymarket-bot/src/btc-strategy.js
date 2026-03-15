@@ -106,9 +106,41 @@ class BTCStrategy {
 
   // ============================================
   // LOTTERY STRATEGY
-  // Buy extreme longshots at <2¢ for $1 each
-  // Potential payout: $50-$250 per bet
+  // Buy extreme longshots at <2¢ with dynamic sizing
+  // BTC_LOTTERY_AMOUNT is the MAX per bet — actual
+  // amount is scaled by price & liquidity:
+  //   < 0.5¢  →  25-40% of max (extreme longshot)
+  //   0.5-1¢  →  40-65% of max
+  //   1-1.5¢  →  65-85% of max
+  //   1.5-2¢  →  85-100% of max (higher probability)
+  // Minimum bet is always $0.50
   // ============================================
+
+  calculateLotteryBetSize(price, liquidity, maxBet) {
+    // Base: scale linearly with price (cheaper = riskier = less)
+    const maxPrice = config.btcLotteryMaxPrice;
+    let ratio = price / maxPrice; // 0.0 to 1.0
+
+    // Apply tiers
+    if (price < 0.005) {
+      ratio = 0.25 + (ratio * 0.15); // 25-40%
+    } else if (price < 0.01) {
+      ratio = 0.40 + (ratio * 0.25); // 40-65%
+    } else if (price < 0.015) {
+      ratio = 0.65 + (ratio * 0.20); // 65-85%
+    } else {
+      ratio = 0.85 + (ratio * 0.15); // 85-100%
+    }
+
+    // Boost slightly for high-liquidity markets (more reliable pricing)
+    if (liquidity > 50000) ratio = Math.min(1.0, ratio * 1.1);
+
+    // Reduce for very low liquidity (harder to exit)
+    if (liquidity < 5000) ratio *= 0.7;
+
+    const amount = Math.max(0.50, Math.min(maxBet, maxBet * ratio));
+    return parseFloat(amount.toFixed(2));
+  }
 
   async runLottery(btcMarkets) {
     if (this.lotteryBets.length >= config.btcMaxLotteryBets) {
@@ -117,7 +149,7 @@ class BTCStrategy {
     }
 
     const maxPrice = config.btcLotteryMaxPrice;
-    const betAmount = config.btcLotteryAmount;
+    const maxBet = config.btcLotteryAmount;
     const opportunities = [];
 
     for (const market of btcMarkets) {
@@ -129,21 +161,25 @@ class BTCStrategy {
 
       // Look for extreme longshot outcomes priced at ≤ maxPrice (default 2¢)
       if (parsed.yesPrice > 0 && parsed.yesPrice <= maxPrice) {
+        const betAmount = this.calculateLotteryBetSize(parsed.yesPrice, parsed.liquidity, maxBet);
         opportunities.push({
           ...parsed,
           side: 'yes',
           price: parsed.yesPrice,
           tokenId: parsed.yesTokenId,
+          betAmount,
           potentialPayout: betAmount / parsed.yesPrice,
         });
       }
 
       if (parsed.noPrice > 0 && parsed.noPrice <= maxPrice) {
+        const betAmount = this.calculateLotteryBetSize(parsed.noPrice, parsed.liquidity, maxBet);
         opportunities.push({
           ...parsed,
           side: 'no',
           price: parsed.noPrice,
           tokenId: parsed.noTokenId,
+          betAmount,
           potentialPayout: betAmount / parsed.noPrice,
         });
       }
@@ -158,10 +194,11 @@ class BTCStrategy {
       // Don't double up
       if (this.lotteryBets.some(b => b.tokenId === opp.tokenId)) continue;
 
+      const betAmount = opp.betAmount;
       const shares = betAmount / opp.price;
       const payout = shares; // each share pays $1 if correct
 
-      console.log(`[BTC LOTTERY] ${opp.side.toUpperCase()} on "${opp.question.substring(0, 60)}..." @ ${(opp.price * 100).toFixed(1)}¢ | $${betAmount} -> potential $${payout.toFixed(2)} payout`);
+      console.log(`[BTC LOTTERY] ${opp.side.toUpperCase()} on "${opp.question.substring(0, 60)}..." @ ${(opp.price * 100).toFixed(1)}¢ | $${betAmount} (max $${maxBet}) -> potential $${payout.toFixed(2)} payout`);
 
       try {
         const result = await api.placeBuyOrder({

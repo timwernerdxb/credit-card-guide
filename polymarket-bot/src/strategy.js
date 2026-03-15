@@ -197,16 +197,20 @@ class Strategy {
           }
         }
 
-        // Calculate realized P&L from sells
+        // Calculate realized P&L from sells — only where we have BOTH buys and sells today.
+        // If sold > bought today, the buy was before PNL_START_DATE — skip (we don't have cost basis).
         let syncedPnl = 0;
         for (const [tokenId, pos] of netPositions.entries()) {
           if (pos.sold > 0 && pos.bought > 0) {
+            // Only count P&L on shares where we know the buy cost (bought today)
+            const soldFromToday = Math.min(pos.sold, pos.bought);
+            if (soldFromToday <= 0) continue;
             const avgBuy = pos.totalCost / pos.bought;
             const avgSell = pos.totalRevenue / pos.sold;
-            const pnl = (avgSell - avgBuy) * pos.sold;
+            const pnl = (avgSell - avgBuy) * soldFromToday;
             syncedPnl += pnl;
             if (Math.abs(pnl) > 0.01) {
-              console.log(`[SYNC] Realized: $${pnl.toFixed(2)} (buy ${avgBuy.toFixed(3)} → sell ${avgSell.toFixed(3)}, ${pos.sold.toFixed(1)} shares)`);
+              console.log(`[SYNC] Realized: $${pnl.toFixed(2)} (buy ${avgBuy.toFixed(3)} → sell ${avgSell.toFixed(3)}, ${soldFromToday.toFixed(1)} shares)`);
             }
           }
         }
@@ -601,8 +605,13 @@ class Strategy {
         try {
           midpoint = await api.getMidpoint(tokenId);
         } catch (err) {
-          console.log(`[REBALANCE] Can't get price for "${(pos.question || '').substring(0, 40)}..." — removing (${err.message})`);
-          toRemove.push(tokenId);
+          // Only remove if not a discovered position (discovered ones might have stale tokens)
+          if (!pos.discovered) {
+            console.log(`[REBALANCE] Can't get price for "${(pos.question || '').substring(0, 40)}..." — removing (${err.message})`);
+            toRemove.push(tokenId);
+          } else {
+            console.log(`[REBALANCE] Can't get price for discovered "${(pos.question || '').substring(0, 40)}..." — keeping but skipping`);
+          }
           continue;
         }
         const currentPrice = parseFloat(midpoint.mid || midpoint || 0);
@@ -618,7 +627,42 @@ class Strategy {
         pos.unrealizedPct = profitPct;
         totalUnrealized += profit;
 
-        console.log(`[REBALANCE] "${pos.question.substring(0, 40)}..." | entry: ${pos.avgPrice.toFixed(3)} | now: ${currentPrice.toFixed(3)} | P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} (${profitPct.toFixed(1)}%)`);
+        console.log(`[REBALANCE] "${(pos.question || '').substring(0, 40)}..." | entry: ${pos.avgPrice.toFixed(3)} | now: ${currentPrice.toFixed(3)} | P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} (${profitPct.toFixed(1)}%)`);
+
+        // Auto-sell dead positions at ≤ 1¢ — book the loss and clean up
+        if (currentPrice <= 0.01 && pos.size >= 1) {
+          console.log(`[REBALANCE] DEAD POSITION: "${(pos.question || '').substring(0, 40)}..." at ${(currentPrice * 100).toFixed(1)}¢ — auto-selling`);
+          try {
+            const sellSize = Math.floor(pos.size * 100) / 100;
+            if (sellSize >= 1) {
+              await api.placeSellOrder({
+                tokenId,
+                price: 0.01,
+                size: sellSize,
+                tickSize: '0.01',
+                negRisk: pos.negRisk || false,
+              });
+              const loss = (0.01 - pos.avgPrice) * sellSize;
+              this.pnl += loss;
+              toRemove.push(tokenId);
+              this.tradeLog.unshift({
+                time: new Date().toISOString(),
+                question: (pos.question || '').substring(0, 80),
+                side: 'SELL (dead)',
+                price: 0.01,
+                size: sellSize.toFixed(2),
+                amount: (0.01 * sellSize).toFixed(2),
+                edge: 'DEAD',
+                status: 'filled',
+                pnl: `$${loss.toFixed(2)}`,
+              });
+              console.log(`[REBALANCE] Sold dead position: $${loss.toFixed(2)} loss booked`);
+            }
+          } catch (err) {
+            console.log(`[REBALANCE] Can't sell dead position: ${err.message}`);
+          }
+          continue;
+        }
 
         // Take profit at +15% or cut loss at -20%
         if (profitPct >= 15 || profitPct <= -20) {
@@ -689,6 +733,14 @@ class Strategy {
     }
 
     this.unrealizedPnl = totalUnrealized;
+
+    // Recalculate total invested from remaining positions
+    this.totalInvested = 0;
+    for (const [, pos] of this.positions.entries()) {
+      this.totalInvested += (pos.avgPrice || 0) * (pos.size || 0);
+    }
+
+    console.log(`[REBALANCE] Total unrealized: ${totalUnrealized >= 0 ? '+' : ''}$${totalUnrealized.toFixed(2)} | Invested: $${this.totalInvested.toFixed(2)} | Realized: $${this.pnl.toFixed(2)}`);
     this.persist();
   }
 

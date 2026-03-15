@@ -31,8 +31,10 @@ module.exports = {
 
   // BTC 5-minute up/down markets
   btc5mEnabled: process.env.BTC_5M_ENABLED !== 'false', // on by default when BTC enabled
-  btc5mAmount: parseFloat(process.env.BTC_5M_AMOUNT || '3'), // bet size per 5-min window
-  btc5mMaxBetsPerWindow: parseInt(process.env.BTC_5M_MAX_BETS || '1'), // max bets per window
+  btc5mAmount: parseFloat(process.env.BTC_5M_AMOUNT || '1'), // $1 per bet — only bets on high-payout opportunities
+  btc5mMaxPrice: parseFloat(process.env.BTC_5M_MAX_PRICE || '0.20'), // only buy side priced ≤ 20¢ (5x+ payout)
+  btc5mMinPayout: parseFloat(process.env.BTC_5M_MIN_PAYOUT || '5'), // minimum potential payout to place bet
+  btc5mMinConfidence: parseFloat(process.env.BTC_5M_MIN_CONFIDENCE || '0.30'), // need 30%+ confidence
   btc5mScanInterval: 60 * 1000, // check every 60s to catch each 5-min window
 
   // Server

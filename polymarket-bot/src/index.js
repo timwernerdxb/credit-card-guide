@@ -141,7 +141,7 @@ app.listen(config.port, async () => {
   console.log(`  BTC lottery: $${config.btcLotteryAmount}/bet (max ${config.btcMaxLotteryBets} bets)`);
   console.log(`  BTC momentum: $${config.btcMomentumAmount}/trade`);
   console.log(`  BTC 5m enabled: ${config.btc5mEnabled}`);
-  console.log(`  BTC 5m amount: $${config.btc5mAmount}/window`);
+  console.log(`  BTC 5m amount: $${config.btc5mAmount}/bet (only when ${(config.btc5mMaxPrice * 100).toFixed(0)}¢ or less → $${config.btc5mMinPayout}+ payout)`);
   console.log('='.repeat(50));
 
   if (!config.privateKey) {

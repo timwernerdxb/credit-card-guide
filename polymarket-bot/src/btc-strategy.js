@@ -797,27 +797,42 @@ class BTCStrategy {
   }
 
   // ---- Place a bet on a 5-minute market ----
+  // ONLY bets when one side is cheap enough for a big payout.
+  // $1 at 10¢ = $10 payout, $1 at 5¢ = $20 payout.
+  // Skips windows where both sides are near 50/50.
   async _trade5m(market) {
     const signal = this._analyze5mSignal(market);
+    const maxPrice = config.btc5mMaxPrice; // default 20¢
+    const minPayout = config.btc5mMinPayout; // default $5
+    const minConfidence = config.btc5mMinConfidence; // default 30%
+    const betAmount = config.btc5mAmount; // default $1
 
     console.log(`[BTC 5M] "${market.question}" | Up: ${(market.upPrice * 100).toFixed(1)}¢ Down: ${(market.downPrice * 100).toFixed(1)}¢`);
     console.log(`[BTC 5M] Signal: ${signal.direction.toUpperCase()} | ${signal.reasoning}`);
 
-    // Only bet if we have some confidence
-    if (signal.confidence < 0.1) {
-      console.log('[BTC 5M] Low confidence, skipping this window');
+    // Determine which side to bet on based on signal direction
+    const isUp = signal.direction === 'up';
+    const price = isUp ? market.upPrice : market.downPrice;
+    const tokenId = isUp ? market.upTokenId : market.downTokenId;
+
+    // GATE 1: Price must be cheap enough (≤ maxPrice, default 20¢)
+    // This ensures high payout multiplier
+    if (price > maxPrice) {
+      console.log(`[BTC 5M] SKIP: ${signal.direction} side at ${(price * 100).toFixed(1)}¢ > max ${(maxPrice * 100).toFixed(0)}¢ — not enough payout potential`);
       this.lastWindowTs = market.windowTs;
       return;
     }
 
-    const betAmount = config.btc5mAmount;
-    const isUp = signal.direction === 'up';
-    const tokenId = isUp ? market.upTokenId : market.downTokenId;
-    const price = isUp ? market.upPrice : market.downPrice;
+    // GATE 2: Price must be at least 1¢ (API minimum)
+    if (price < 0.01) {
+      console.log(`[BTC 5M] SKIP: Price too low (${(price * 100).toFixed(1)}¢)`);
+      this.lastWindowTs = market.windowTs;
+      return;
+    }
 
-    // Don't buy at extreme prices
-    if (price > 0.85 || price < 0.05) {
-      console.log(`[BTC 5M] Price ${(price * 100).toFixed(1)}¢ too extreme, skipping`);
+    // GATE 3: Confidence must be high enough
+    if (signal.confidence < minConfidence) {
+      console.log(`[BTC 5M] SKIP: Confidence ${(signal.confidence * 100).toFixed(0)}% < minimum ${(minConfidence * 100).toFixed(0)}% — not confident enough`);
       this.lastWindowTs = market.windowTs;
       return;
     }
@@ -825,7 +840,14 @@ class BTCStrategy {
     const shares = betAmount / price;
     const potentialPayout = shares; // $1 per share if correct
 
-    console.log(`[BTC 5M] Betting $${betAmount} on ${signal.direction.toUpperCase()} @ ${(price * 100).toFixed(1)}¢ → potential $${potentialPayout.toFixed(2)}`);
+    // GATE 4: Potential payout must be worth it
+    if (potentialPayout < minPayout) {
+      console.log(`[BTC 5M] SKIP: Payout $${potentialPayout.toFixed(2)} < minimum $${minPayout} — not worth the risk`);
+      this.lastWindowTs = market.windowTs;
+      return;
+    }
+
+    console.log(`[BTC 5M] BETTING $${betAmount} on ${signal.direction.toUpperCase()} @ ${(price * 100).toFixed(1)}¢ → potential $${potentialPayout.toFixed(2)} payout (${(potentialPayout / betAmount).toFixed(0)}x return)`);
 
     try {
       await api.placeBuyOrder({
@@ -853,7 +875,7 @@ class BTCStrategy {
       });
 
       this.totalBet += betAmount;
-      this.stats.lotteryBetsPlaced++; // count 5m bets in lottery stats
+      this.stats.lotteryBetsPlaced++;
 
       this.tradeLog.unshift({
         time: new Date().toISOString(),
@@ -863,16 +885,15 @@ class BTCStrategy {
         price,
         shares: shares.toFixed(2),
         amount: betAmount,
-        potentialPayout: `$${potentialPayout.toFixed(2)}`,
+        potentialPayout: `$${potentialPayout.toFixed(2)} (${(potentialPayout / betAmount).toFixed(0)}x)`,
         confidence: `${(signal.confidence * 100).toFixed(0)}%`,
         status: 'placed',
       });
 
-      // Keep trade log manageable
       if (this.tradeLog.length > 100) this.tradeLog.length = 100;
 
       this.persist();
-      console.log(`[BTC 5M] Order placed! ${shares.toFixed(2)} shares`);
+      console.log(`[BTC 5M] Order placed! ${shares.toFixed(2)} shares @ ${(price * 100).toFixed(1)}¢ → $${potentialPayout.toFixed(2)} if correct`);
     } catch (err) {
       this.stats.errors++;
       console.error(`[BTC 5M] Order failed: ${err.message}`);

@@ -182,6 +182,42 @@ class Strategy {
 
         this.pnl = syncedPnl;
         console.log(`[SYNC] Realized P&L since ${config.pnlStartDate}: $${syncedPnl.toFixed(2)}`);
+
+        // Discover positions: check tokens we bought for actual holdings
+        // This catches positions the bot lost track of (restarts, unfilled-then-filled orders, etc.)
+        let discovered = 0;
+        for (const [tokenId, pos] of netPositions.entries()) {
+          if (pos.bought <= 0) continue;
+          if (this.positions.has(tokenId)) continue; // already tracking
+
+          try {
+            const balance = await api.getBalanceAllowance(tokenId);
+            const actualShares = balance ? parseFloat(balance.balance || 0) / 1e6 : 0;
+            if (actualShares >= 1.0) {
+              const avgBuy = pos.totalCost / pos.bought;
+              this.positions.set(tokenId, {
+                marketId: '',
+                question: `Token ${tokenId.substring(0, 12)}...`,
+                side: 'buy',
+                size: actualShares,
+                avgPrice: avgBuy,
+                entryTime: new Date().toISOString(),
+                edge: 0,
+                negRisk: false,
+                discovered: true,
+              });
+              discovered++;
+              console.log(`[SYNC] Discovered position: ${actualShares.toFixed(2)} shares @ ${avgBuy.toFixed(3)} (token: ${tokenId.substring(0, 16)}...)`);
+            }
+          } catch {
+            // skip — invalid token
+          }
+        }
+        if (discovered > 0) {
+          console.log(`[SYNC] Discovered ${discovered} positions from trade history`);
+          // Enrich with market names
+          await this._enrichDiscoveredPositions();
+        }
       }
     } catch (err) {
       console.error('[SYNC] P&L calc error:', err.message);
@@ -189,6 +225,29 @@ class Strategy {
 
     console.log(`[SYNC] Final: ${this.positions.size} positions, P&L: $${this.pnl.toFixed(2)}, invested: $${this.totalInvested.toFixed(2)}`);
     this.persist();
+  }
+
+  // ---- Fetch market names for discovered positions ----
+  async _enrichDiscoveredPositions() {
+    try {
+      const markets = await api.getMarkets({ limit: 100 });
+      for (const market of markets) {
+        if (!market.clobTokenIds) continue;
+        const tokenIds = typeof market.clobTokenIds === 'string'
+          ? JSON.parse(market.clobTokenIds) : market.clobTokenIds;
+        for (const tid of tokenIds) {
+          const pos = this.positions.get(tid);
+          if (pos && (pos.discovered || pos.question.startsWith('Token '))) {
+            pos.question = market.question;
+            pos.marketId = market.id;
+            pos.negRisk = market.negRisk || false;
+            console.log(`[SYNC] Matched: "${market.question.substring(0, 50)}..."`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[SYNC] Could not enrich market names:', err.message);
+    }
   }
 
   // ---- Scan markets for opportunities ----

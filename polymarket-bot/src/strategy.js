@@ -52,7 +52,14 @@ class Strategy {
     }
 
     this.tradeLog = saved.tradeLog || [];
-    this.pnl = saved.pnl || 0;
+    // Reset P&L if it's from the old broken sync (> $1000 is clearly wrong for $10 trades)
+    const savedPnl = saved.pnl || 0;
+    if (Math.abs(savedPnl) > 1000) {
+      console.log(`[STRATEGY] Resetting inflated P&L ($${savedPnl.toFixed(2)}) to $0`);
+      this.pnl = 0;
+    } else {
+      this.pnl = savedPnl;
+    }
 
     // Recalculate invested from actual positions (not stale stored value)
     this.totalInvested = 0;
@@ -122,98 +129,10 @@ class Strategy {
       }
     }
 
-    try {
-      const rawResult = await api.getTrades();
-
-      // Handle different response formats
-      let trades;
-      if (Array.isArray(rawResult)) {
-        trades = rawResult;
-      } else if (rawResult && typeof rawResult === 'object') {
-        const arrayKey = ['data', 'trades'].find(k => Array.isArray(rawResult[k]))
-          || Object.keys(rawResult).find(k => Array.isArray(rawResult[k]));
-        trades = arrayKey ? rawResult[arrayKey] : null;
-      }
-
-      if (!trades || trades.length === 0) {
-        console.log('[SYNC] No trades found');
-        return;
-      }
-
-      // Filter to today's trades only
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayTs = todayStart.getTime();
-
-      trades = trades.filter(t => {
-        const tradeTime = new Date(t.match_time || t.last_update || 0).getTime();
-        return tradeTime >= todayTs;
-      });
-
-      console.log(`[SYNC] ${trades.length} trades from today, calculating P&L...`);
-
-      if (trades.length === 0) {
-        console.log('[SYNC] No trades today, P&L starts at $0');
-        this.pnl = 0;
-        this.persist();
-        return;
-      }
-
-      // Build net position per tokenId
-      const netPositions = new Map();
-
-      for (const trade of trades) {
-        const tokenId = trade.asset_id;
-        // `side` is already our side (BUY/SELL) from our perspective
-        // `trader_side` is just our role (MAKER/TAKER), not direction
-        const ourSide = (trade.side || '').toUpperCase();
-        const size = parseFloat(trade.size || 0);
-        const price = parseFloat(trade.price || 0);
-
-        if (!tokenId || size <= 0 || price <= 0) continue;
-
-        if (!netPositions.has(tokenId)) {
-          netPositions.set(tokenId, { bought: 0, sold: 0, totalCost: 0, totalRevenue: 0 });
-        }
-
-        const pos = netPositions.get(tokenId);
-        if (ourSide === 'BUY') {
-          pos.bought += size;
-          pos.totalCost += size * price;
-        } else if (ourSide === 'SELL') {
-          pos.sold += size;
-          pos.totalRevenue += size * price;
-        }
-      }
-
-      // Calculate realized P&L from closed portions only
-      let syncedPnl = 0;
-      let sellCount = 0;
-
-      for (const [tokenId, pos] of netPositions.entries()) {
-        if (pos.sold > 0 && pos.bought > 0) {
-          const avgBuyPrice = pos.totalCost / pos.bought;
-          const avgSellPrice = pos.totalRevenue / pos.sold;
-          const pnl = (avgSellPrice - avgBuyPrice) * pos.sold;
-          syncedPnl += pnl;
-          sellCount++;
-          if (Math.abs(pnl) > 0.01) {
-            console.log(`[SYNC] Realized: $${pnl.toFixed(2)} on token ${tokenId.substring(0, 16)}... (buy ${avgBuyPrice.toFixed(3)} → sell ${avgSellPrice.toFixed(3)}, ${pos.sold.toFixed(1)} shares)`);
-          }
-        }
-      }
-
-      console.log(`[SYNC] Total realized P&L: $${syncedPnl.toFixed(2)} from ${sellCount} tokens with sells`);
-      console.log(`[SYNC] Stored P&L: $${this.pnl.toFixed(2)}, Positions: ${this.positions.size} (from bot tracking)`);
-
-      // Always use synced P&L from API — it's the source of truth
-      console.log(`[SYNC] P&L from API: $${syncedPnl.toFixed(2)} (was $${this.pnl.toFixed(2)})`);
-      this.pnl = syncedPnl;
-
-      this.persist();
-    } catch (err) {
-      console.error('[SYNC] Error:', err.message);
-    }
+    // P&L is tracked by the bot itself when it sells (in rebalance).
+    // No need to reconstruct from trade history — stored P&L is the truth.
+    console.log(`[SYNC] P&L: $${this.pnl.toFixed(2)} (from bot tracking), ${this.positions.size} verified positions`);
+    this.persist();
   }
 
   // ---- Scan markets for opportunities ----

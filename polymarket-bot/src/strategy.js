@@ -143,10 +143,20 @@ class Strategy {
 
       for (const trade of trades) {
         const tokenId = trade.asset_id || trade.tokenId || trade.token_id || trade.assetId;
-        // `side` = BUY/SELL (order direction)
-        // `trader_side` = MAKER/TAKER (role in trade, NOT direction)
-        // Always use `side` for buy/sell direction
-        const rawSide = (trade.side || '').toUpperCase().trim();
+        // `side` = the TAKER's order side (BUY/SELL)
+        // `trader_side` = our role: MAKER or TAKER
+        // If we're the TAKER, `side` is our direction
+        // If we're the MAKER, `side` is the OTHER person's direction — flip it
+        const takerSide = (trade.side || '').toUpperCase().trim();
+        const role = (trade.trader_side || '').toUpperCase().trim();
+        let rawSide;
+        if (role === 'MAKER') {
+          // We're the maker: flip the taker's side
+          rawSide = takerSide === 'BUY' ? 'SELL' : 'BUY';
+        } else {
+          // We're the taker: side is our direction
+          rawSide = takerSide;
+        }
         const size = parseFloat(trade.size || trade.amount || 0);
         const price = parseFloat(trade.price || 0);
         const status = (trade.status || '').toUpperCase();

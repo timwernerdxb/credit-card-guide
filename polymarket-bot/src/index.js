@@ -162,6 +162,10 @@ app.listen(config.port, async () => {
     // Sync from Polymarket API to reconstruct P&L and find missing positions
     await strategy.syncFromAPI();
 
+    // Calculate unrealized P&L immediately after sync
+    await strategy.rebalance();
+    await btcStrategy.rebalance();
+
     // Initial scans
     await strategy.scan();
     await btcStrategy.scan();

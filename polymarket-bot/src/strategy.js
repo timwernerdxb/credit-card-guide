@@ -36,6 +36,8 @@ class Strategy {
     if (saved.positions && saved.positions.length > 0) {
       this.positions = new Map();
       for (const p of saved.positions) {
+        // Skip stale synced positions — only keep positions the bot actually opened
+        if (p.synced) continue;
         this.positions.set(p.tokenId, {
           marketId: p.marketId,
           question: p.question,
@@ -51,11 +53,17 @@ class Strategy {
 
     this.tradeLog = saved.tradeLog || [];
     this.pnl = saved.pnl || 0;
-    this.totalInvested = saved.totalInvested || 0;
+
+    // Recalculate invested from actual positions (not stale stored value)
+    this.totalInvested = 0;
+    for (const [, pos] of this.positions.entries()) {
+      this.totalInvested += (pos.avgPrice || 0) * (pos.size || 0);
+    }
+
     if (saved.stats) {
       this.stats = { ...this.stats, ...saved.stats };
     }
-    console.log(`[STRATEGY] Restored: ${this.positions.size} positions, P&L: $${this.pnl.toFixed(2)}, ${this.tradeLog.length} trades in log`);
+    console.log(`[STRATEGY] Restored: ${this.positions.size} positions, P&L: $${this.pnl.toFixed(2)}, invested: $${this.totalInvested.toFixed(2)}`);
   }
 
   // ---- Persist current state ----
@@ -73,216 +81,98 @@ class Strategy {
     });
   }
 
-  // ---- Sync positions from Polymarket API (reconstructs after redeploy) ----
+  // ---- Sync P&L from Polymarket API trade history ----
+  // ONLY calculates realized P&L from sells. Does NOT add positions.
+  // Positions are tracked by the bot when it places trades and persisted to disk.
   async syncFromAPI() {
-    console.log('[SYNC] Syncing positions from Polymarket API...');
+    console.log('[SYNC] Calculating realized P&L from Polymarket trade history...');
+
+    // Clear any stale synced positions from previous broken syncs
+    for (const [tokenId, pos] of this.positions.entries()) {
+      if (pos.synced) {
+        this.positions.delete(tokenId);
+      }
+    }
+
     try {
-      // Get trade history from CLOB
       const rawResult = await api.getTrades();
 
-      // Handle different response formats from CLOB client
-      // Could be: Trade[], { data: Trade[] }, { trades: Trade[] }, etc.
+      // Handle different response formats
       let trades;
       if (Array.isArray(rawResult)) {
         trades = rawResult;
-      } else if (rawResult && Array.isArray(rawResult.data)) {
-        trades = rawResult.data;
-      } else if (rawResult && Array.isArray(rawResult.trades)) {
-        trades = rawResult.trades;
       } else if (rawResult && typeof rawResult === 'object') {
-        // Try to find any array property
-        const arrayKey = Object.keys(rawResult).find(k => Array.isArray(rawResult[k]));
-        if (arrayKey) {
-          trades = rawResult[arrayKey];
-          console.log(`[SYNC] Found trades in response key "${arrayKey}"`);
-        } else {
-          console.log('[SYNC] Unexpected response format:', JSON.stringify(rawResult).substring(0, 500));
-          return;
-        }
-      } else {
-        console.log('[SYNC] No trades found on Polymarket');
+        const arrayKey = ['data', 'trades'].find(k => Array.isArray(rawResult[k]))
+          || Object.keys(rawResult).find(k => Array.isArray(rawResult[k]));
+        trades = arrayKey ? rawResult[arrayKey] : null;
+      }
+
+      if (!trades || trades.length === 0) {
+        console.log('[SYNC] No trades found');
         return;
       }
 
-      if (trades.length === 0) {
-        console.log('[SYNC] No trades found on Polymarket');
-        return;
-      }
+      console.log(`[SYNC] Found ${trades.length} trades, calculating P&L...`);
 
-      // Debug: log first few trades to understand field values
-      console.log(`[SYNC] Found ${trades.length} trades. Sample trade fields: ${JSON.stringify(Object.keys(trades[0]))}`);
-      console.log(`[SYNC] Sample trade: ${JSON.stringify(trades[0]).substring(0, 300)}`);
-
-      // Filter to today's trades only
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayTs = todayStart.getTime();
-
-      const todayTrades = trades.filter(t => {
-        const tradeTime = new Date(t.match_time || t.last_update || 0).getTime();
-        return tradeTime >= todayTs;
-      });
-
-      console.log(`[SYNC] Filtered to ${todayTrades.length} trades from today (out of ${trades.length} total)`);
-
-      if (todayTrades.length === 0) {
-        console.log('[SYNC] No trades today, keeping stored state');
-        return;
-      }
-
-      // Use today's trades for position reconstruction
-      trades = todayTrades;
-
-      // Build net position per tokenId from trade history
-      // CLOB client trades may use different field names:
-      //   asset_id OR tokenId, side (BUY/SELL), size, price
-      //   trader_side might differ from order side
+      // Build net position per tokenId
       const netPositions = new Map();
 
       for (const trade of trades) {
-        const tokenId = trade.asset_id || trade.tokenId || trade.token_id || trade.assetId;
-        // `side` = the TAKER's order side (BUY/SELL)
-        // `trader_side` = our role: MAKER or TAKER
-        // If we're the TAKER, `side` is our direction
-        // If we're the MAKER, `side` is the OTHER person's direction — flip it
-        const takerSide = (trade.side || '').toUpperCase().trim();
-        const role = (trade.trader_side || '').toUpperCase().trim();
-        let rawSide;
-        if (role === 'MAKER') {
-          // We're the maker: flip the taker's side
-          rawSide = takerSide === 'BUY' ? 'SELL' : 'BUY';
-        } else {
-          // We're the taker: side is our direction
-          rawSide = takerSide;
-        }
-        const size = parseFloat(trade.size || trade.amount || 0);
+        const tokenId = trade.asset_id;
+        const takerSide = (trade.side || '').toUpperCase();
+        const role = (trade.trader_side || '').toUpperCase();
+        // Flip side if we're the maker (side = taker's direction, not ours)
+        const ourSide = role === 'MAKER'
+          ? (takerSide === 'BUY' ? 'SELL' : 'BUY')
+          : takerSide;
+        const size = parseFloat(trade.size || 0);
         const price = parseFloat(trade.price || 0);
-        const status = (trade.status || '').toUpperCase();
-
-        // Only skip explicitly cancelled trades
-        if (status === 'CANCELLED' || status === 'CANCELED') continue;
 
         if (!tokenId || size <= 0 || price <= 0) continue;
 
         if (!netPositions.has(tokenId)) {
-          netPositions.set(tokenId, {
-            bought: 0, sold: 0, totalCost: 0, totalRevenue: 0,
-            lastPrice: price, market: trade.market || trade.question || '',
-          });
+          netPositions.set(tokenId, { bought: 0, sold: 0, totalCost: 0, totalRevenue: 0 });
         }
 
         const pos = netPositions.get(tokenId);
-        if (rawSide === 'BUY') {
+        if (ourSide === 'BUY') {
           pos.bought += size;
           pos.totalCost += size * price;
-        } else if (rawSide === 'SELL') {
+        } else if (ourSide === 'SELL') {
           pos.sold += size;
           pos.totalRevenue += size * price;
         }
-        pos.lastPrice = price;
       }
 
-      // Calculate net holdings and P&L
-      let syncedCount = 0;
+      // Calculate realized P&L from closed portions only
       let syncedPnl = 0;
-      let syncedInvested = 0;
-
-      console.log(`[SYNC] Processing ${netPositions.size} unique tokens...`);
+      let sellCount = 0;
 
       for (const [tokenId, pos] of netPositions.entries()) {
-        const netShares = pos.bought - pos.sold;
-        const avgBuyPrice = pos.bought > 0 ? pos.totalCost / pos.bought : 0;
-
-        // Realized P&L from closed portions
-        if (pos.sold > 0) {
+        if (pos.sold > 0 && pos.bought > 0) {
+          const avgBuyPrice = pos.totalCost / pos.bought;
           const avgSellPrice = pos.totalRevenue / pos.sold;
           const pnl = (avgSellPrice - avgBuyPrice) * pos.sold;
           syncedPnl += pnl;
-          if (Math.abs(pnl) > 0.001) {
-            console.log(`[SYNC] Token ${tokenId.substring(0, 12)}... realized: $${pnl.toFixed(2)} (bought ${pos.bought.toFixed(2)} @ ${avgBuyPrice.toFixed(3)}, sold ${pos.sold.toFixed(2)} @ ${avgSellPrice.toFixed(3)})`);
-          }
-        }
-
-        // Still holding shares? Add as position
-        // Skip tiny positions (< 1 share or < $0.50 invested) — likely dust from rounding or redeemed markets
-        if (netShares >= 1.0 && avgBuyPrice > 0) {
-          const invested = avgBuyPrice * netShares;
-          if (invested < 0.50) continue; // skip dust
-
-          syncedInvested += invested;
-
-          // Only add if we don't already track this position
-          if (!this.positions.has(tokenId)) {
-            this.positions.set(tokenId, {
-              marketId: pos.market,
-              question: pos.market || `Token ${tokenId.substring(0, 12)}...`,
-              side: 'buy',
-              size: netShares,
-              avgPrice: avgBuyPrice,
-              entryTime: new Date().toISOString(),
-              edge: 0,
-              negRisk: false,
-              synced: true,
-            });
-            syncedCount++;
-            console.log(`[SYNC] Restored position: ${netShares.toFixed(2)} shares @ ${avgBuyPrice.toFixed(3)} ($${invested.toFixed(2)} invested) (token: ${tokenId.substring(0, 16)}...)`);
+          sellCount++;
+          if (Math.abs(pnl) > 0.01) {
+            console.log(`[SYNC] Realized: $${pnl.toFixed(2)} on token ${tokenId.substring(0, 16)}... (buy ${avgBuyPrice.toFixed(3)} → sell ${avgSellPrice.toFixed(3)}, ${pos.sold.toFixed(1)} shares)`);
           }
         }
       }
 
-      // Update P&L: use the HIGHER of stored vs synced
-      // (stored P&L tracks sells the bot made; synced P&L reconstructs from API)
-      // Never overwrite real P&L with $0 from a sync that missed sell trades
-      if (syncedPnl !== 0) {
-        if (Math.abs(syncedPnl) > Math.abs(this.pnl)) {
-          console.log(`[SYNC] Updating P&L from API: $${this.pnl.toFixed(2)} → $${syncedPnl.toFixed(2)}`);
-          this.pnl = syncedPnl;
-        } else {
-          console.log(`[SYNC] Keeping stored P&L ($${this.pnl.toFixed(2)}) over synced ($${syncedPnl.toFixed(2)})`);
-        }
-      } else {
-        console.log(`[SYNC] API returned no sell data, keeping stored P&L: $${this.pnl.toFixed(2)}`);
+      console.log(`[SYNC] Total realized P&L: $${syncedPnl.toFixed(2)} from ${sellCount} tokens with sells`);
+      console.log(`[SYNC] Stored P&L: $${this.pnl.toFixed(2)}, Positions: ${this.positions.size} (from bot tracking)`);
+
+      // Only update P&L if sync found sell data and it's more than stored
+      if (syncedPnl !== 0 && Math.abs(syncedPnl) > Math.abs(this.pnl)) {
+        console.log(`[SYNC] Updating P&L: $${this.pnl.toFixed(2)} → $${syncedPnl.toFixed(2)}`);
+        this.pnl = syncedPnl;
       }
-      this.totalInvested = syncedInvested > 0 ? syncedInvested : this.totalInvested;
-
-      console.log(`[SYNC] Result: ${syncedCount} new positions, P&L: $${this.pnl.toFixed(2)}, invested: $${this.totalInvested.toFixed(2)}`);
-
-      // Try to enrich positions with market names from Gamma API
-      await this._enrichPositionNames();
 
       this.persist();
     } catch (err) {
-      console.error('[SYNC] Error syncing from API:', err.message);
-      console.error('[SYNC] Stack:', err.stack);
-    }
-  }
-
-  // ---- Fetch market names for synced positions ----
-  async _enrichPositionNames() {
-    try {
-      const markets = await api.getMarkets({ limit: 100 });
-      const tokenToMarket = new Map();
-
-      for (const market of markets) {
-        if (!market.clobTokenIds) continue;
-        const tokenIds = typeof market.clobTokenIds === 'string'
-          ? JSON.parse(market.clobTokenIds) : market.clobTokenIds;
-        for (const tid of tokenIds) {
-          tokenToMarket.set(tid, { question: market.question, id: market.id, negRisk: market.negRisk || false });
-        }
-      }
-
-      for (const [tokenId, pos] of this.positions.entries()) {
-        if (pos.synced && tokenToMarket.has(tokenId)) {
-          const info = tokenToMarket.get(tokenId);
-          pos.question = info.question;
-          pos.marketId = info.id;
-          pos.negRisk = info.negRisk;
-          console.log(`[SYNC] Matched: "${info.question.substring(0, 50)}..."`);
-        }
-      }
-    } catch (err) {
-      console.warn('[SYNC] Could not enrich market names:', err.message);
+      console.error('[SYNC] Error:', err.message);
     }
   }
 

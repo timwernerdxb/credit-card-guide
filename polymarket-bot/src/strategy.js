@@ -116,6 +116,7 @@ class Strategy {
       // Calculate net holdings and P&L
       let syncedCount = 0;
       let syncedPnl = 0;
+      let syncedInvested = 0;
 
       for (const [tokenId, pos] of netPositions.entries()) {
         const netShares = pos.bought - pos.sold;
@@ -129,9 +130,11 @@ class Strategy {
 
         // Still holding shares? Add as position
         if (netShares > 0.01 && avgBuyPrice > 0) {
+          const invested = avgBuyPrice * netShares;
+          syncedInvested += invested;
+
           // Only add if we don't already track this position
           if (!this.positions.has(tokenId)) {
-            const invested = avgBuyPrice * netShares;
             this.positions.set(tokenId, {
               marketId: pos.market,
               question: pos.market || `Token ${tokenId.substring(0, 12)}...`,
@@ -143,19 +146,17 @@ class Strategy {
               negRisk: false,
               synced: true,
             });
-            this.totalInvested += invested;
             syncedCount++;
             console.log(`[SYNC] Restored position: ${netShares.toFixed(2)} shares @ ${avgBuyPrice.toFixed(3)} (token: ${tokenId.substring(0, 16)}...)`);
           }
         }
       }
 
-      // Update realized P&L if we had none stored
-      if (this.pnl === 0 && syncedPnl !== 0) {
-        this.pnl = syncedPnl;
-      }
+      // Always update P&L and invested from API truth
+      this.pnl = syncedPnl;
+      this.totalInvested = syncedInvested;
 
-      console.log(`[SYNC] Synced ${syncedCount} positions, realized P&L from history: $${syncedPnl.toFixed(2)}`);
+      console.log(`[SYNC] Synced ${syncedCount} new positions, realized P&L: $${syncedPnl.toFixed(2)}, invested: $${syncedInvested.toFixed(2)}`);
 
       // Try to enrich positions with market names from Gamma API
       await this._enrichPositionNames();

@@ -162,11 +162,9 @@ class Strategy {
       console.log(`[SYNC] Total realized P&L: $${syncedPnl.toFixed(2)} from ${sellCount} tokens with sells`);
       console.log(`[SYNC] Stored P&L: $${this.pnl.toFixed(2)}, Positions: ${this.positions.size} (from bot tracking)`);
 
-      // Only update P&L if sync found sell data and it's more than stored
-      if (syncedPnl !== 0 && Math.abs(syncedPnl) > Math.abs(this.pnl)) {
-        console.log(`[SYNC] Updating P&L: $${this.pnl.toFixed(2)} → $${syncedPnl.toFixed(2)}`);
-        this.pnl = syncedPnl;
-      }
+      // Always use synced P&L from API — it's the source of truth
+      console.log(`[SYNC] P&L from API: $${syncedPnl.toFixed(2)} (was $${this.pnl.toFixed(2)})`);
+      this.pnl = syncedPnl;
 
       this.persist();
     } catch (err) {

@@ -3,6 +3,36 @@ const { Wallet } = require('@ethersproject/wallet');
 const fetch = require('node-fetch');
 const config = require('./config');
 
+// ---- Proxy agent setup ----
+let proxyAgent = null;
+
+function getProxyAgent() {
+  if (proxyAgent) return proxyAgent;
+  if (!config.proxyUrl) return undefined;
+
+  const url = config.proxyUrl;
+
+  if (url.startsWith('socks')) {
+    const { SocksProxyAgent } = require('socks-proxy-agent');
+    proxyAgent = new SocksProxyAgent(url);
+  } else {
+    const { HttpsProxyAgent } = require('https-proxy-agent');
+    proxyAgent = new HttpsProxyAgent(url);
+  }
+
+  console.log(`[PROXY] Using proxy: ${url.replace(/\/\/(.+?):(.+?)@/, '//$1:***@')}`);
+  return proxyAgent;
+}
+
+// ---- Patched fetch that uses proxy ----
+function proxiedFetch(url, options = {}) {
+  const agent = getProxyAgent();
+  if (agent) {
+    options.agent = agent;
+  }
+  return fetch(url, options);
+}
+
 class PolymarketAPI {
   constructor() {
     this.client = null;
@@ -14,6 +44,11 @@ class PolymarketAPI {
   async init() {
     if (!config.privateKey) {
       throw new Error('PRIVATE_KEY env var is required');
+    }
+
+    // Monkey-patch global fetch for the CLOB client to use our proxy
+    if (config.proxyUrl) {
+      this._patchGlobalFetch();
     }
 
     this.signer = new Wallet(config.privateKey);
@@ -38,10 +73,35 @@ class PolymarketAPI {
     return this;
   }
 
+  // ---- Patch axios inside the CLOB client to use proxy ----
+  _patchGlobalFetch() {
+    const agent = getProxyAgent();
+    if (!agent) return;
+
+    // The CLOB client uses axios internally. We patch axios defaults
+    // to route through the proxy.
+    try {
+      const axios = require('axios');
+      const { HttpsProxyAgent } = config.proxyUrl.startsWith('socks')
+        ? { HttpsProxyAgent: require('socks-proxy-agent').SocksProxyAgent }
+        : require('https-proxy-agent');
+
+      const proxyAgentInstance = new HttpsProxyAgent(config.proxyUrl);
+      axios.defaults.httpsAgent = proxyAgentInstance;
+      axios.defaults.httpAgent = proxyAgentInstance;
+      axios.defaults.proxy = false; // Disable axios built-in proxy, use agent instead
+
+      console.log('[PROXY] Axios patched to use proxy for CLOB client');
+    } catch (err) {
+      console.warn('[PROXY] Could not patch axios:', err.message);
+      console.warn('[PROXY] CLOB API calls may not go through proxy');
+    }
+  }
+
   // ---- Public: Fetch markets from Gamma API ----
   async getMarkets({ limit = 100, closed = false } = {}) {
     const url = `${this.gammaBase}/markets?closed=${closed}&limit=${limit}&order=volume24hr&ascending=false`;
-    const res = await fetch(url);
+    const res = await proxiedFetch(url);
     if (!res.ok) throw new Error(`Gamma API error: ${res.status}`);
     return res.json();
   }
@@ -49,7 +109,7 @@ class PolymarketAPI {
   // ---- Public: Single market ----
   async getMarket(conditionId) {
     const url = `${this.gammaBase}/markets/${conditionId}`;
-    const res = await fetch(url);
+    const res = await proxiedFetch(url);
     if (!res.ok) throw new Error(`Gamma market error: ${res.status}`);
     return res.json();
   }
@@ -62,26 +122,6 @@ class PolymarketAPI {
   // ---- CLOB: Get midpoint price ----
   async getMidpoint(tokenId) {
     return this.client.getMidpoint(tokenId);
-  }
-
-  // ---- CLOB: Get tick size for a market token ----
-  async getTickSize(tokenId) {
-    try {
-      const book = await this.client.getOrderBook(tokenId);
-      // Default tick size
-      return '0.01';
-    } catch {
-      return '0.01';
-    }
-  }
-
-  // ---- CLOB: Get neg risk flag for market ----
-  async getMarketInfo(tokenId) {
-    try {
-      return await this.client.getMarket(tokenId);
-    } catch {
-      return null;
-    }
   }
 
   // ---- CLOB: Place a buy order ----

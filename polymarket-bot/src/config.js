@@ -6,6 +6,9 @@ module.exports = {
   funderAddress: process.env.FUNDER_ADDRESS,
   signatureType: parseInt(process.env.SIGNATURE_TYPE || '0'),
 
+  // Proxy (HTTP or SOCKS5)
+  proxyUrl: process.env.PROXY_URL || '',
+
   // Endpoints
   clobHost: 'https://clob.polymarket.com',
   gammaBaseUrl: 'https://gamma-api.polymarket.com',

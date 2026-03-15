@@ -154,8 +154,14 @@ class Strategy {
       }
 
       if (trades && trades.length > 0) {
-        // Debug: log match_time format
-        console.log(`[SYNC] DEBUG: match_time sample: "${trades[0].match_time}" (type: ${typeof trades[0].match_time})`);
+        // Debug: log first trade structure to understand fields
+        const t0 = trades[0];
+        console.log(`[SYNC] DEBUG trade[0] keys: ${Object.keys(t0).join(', ')}`);
+        console.log(`[SYNC] DEBUG trade[0]: side=${t0.side}, type=${t0.type}, maker_address=${t0.maker_address}, owner=${t0.owner}, price=${t0.price}, size=${t0.size}, match_time=${t0.match_time}`);
+        if (trades.length > 1) {
+          const t1 = trades[1];
+          console.log(`[SYNC] DEBUG trade[1]: side=${t1.side}, type=${t1.type}, maker_address=${t1.maker_address}, owner=${t1.owner}, price=${t1.price}, size=${t1.size}`);
+        }
 
         // Only count trades from PNL_START_DATE onward
         const startTs = new Date(config.pnlStartDate).getTime();
@@ -179,7 +185,12 @@ class Strategy {
         const netPositions = new Map();
         for (const trade of trades) {
           const tokenId = trade.asset_id;
-          const ourSide = (trade.side || '').toUpperCase();
+          // trade.side is the MAKER's side. If we were the TAKER, our side is opposite.
+          let ourSide = (trade.side || '').toUpperCase();
+          const tradeType = (trade.type || '').toUpperCase();
+          if (tradeType === 'TAKER') {
+            ourSide = ourSide === 'BUY' ? 'SELL' : 'BUY';
+          }
           const size = parseFloat(trade.size || 0);
           const price = parseFloat(trade.price || 0);
           if (!tokenId || size <= 0 || price <= 0) continue;

@@ -148,11 +148,11 @@ class Strategy {
         trades = trades.filter(t => {
           const raw = t.match_time || t.last_update || 0;
           // Handle Unix seconds (10 digits) vs milliseconds (13 digits) vs ISO string
+          // match_time can be a string like "1773609303" — parse to number first
           let tradeTime;
-          if (typeof raw === 'number' && raw < 1e12) {
-            tradeTime = raw * 1000; // seconds → milliseconds
-          } else if (typeof raw === 'number') {
-            tradeTime = raw;
+          const num = typeof raw === 'number' ? raw : Number(raw);
+          if (!isNaN(num) && num > 0) {
+            tradeTime = num < 1e12 ? num * 1000 : num; // seconds → milliseconds
           } else {
             tradeTime = new Date(raw).getTime();
           }
@@ -303,9 +303,13 @@ class Strategy {
 
       console.log(`[SCAN] Found ${opportunities.length} opportunities, taking top ${topPicks.length}`);
 
+      // Count only bot-opened positions toward limit (not discovered ones)
+      const botPositions = [...this.positions.values()].filter(p => !p.discovered).length;
+
       for (const opp of topPicks) {
-        if (this.positions.size >= config.maxOpenPositions) {
-          console.log('[SCAN] Max positions reached, skipping');
+        const currentBotPositions = [...this.positions.values()].filter(p => !p.discovered).length;
+        if (currentBotPositions >= config.maxOpenPositions) {
+          console.log(`[SCAN] Max bot positions reached (${currentBotPositions}/${config.maxOpenPositions}), skipping (${this.positions.size} total incl. discovered)`);
           break;
         }
 
@@ -458,10 +462,16 @@ class Strategy {
 
     try {
       // Use market order (FOK) so it fills immediately or not at all
+      // Round size DOWN to 2 decimals (maker amount max 2 decimals)
+      const roundedSize = Math.floor(size * 100) / 100;
+      if (roundedSize < 1) {
+        console.log(`[TRADE] Size too small after rounding: ${roundedSize}`);
+        return;
+      }
       const result = await api.placeMarketBuy({
         tokenId,
         price: parseFloat(price.toFixed(2)),
-        size: parseFloat(size.toFixed(2)),
+        size: roundedSize,
         tickSize: '0.01',
         negRisk: negRisk || false,
       });
@@ -480,22 +490,22 @@ class Strategy {
         marketId: opportunity.marketId,
         question,
         side,
-        size,
+        size: roundedSize,
         avgPrice: price,
         entryTime: new Date().toISOString(),
         edge,
         negRisk,
       });
 
-      this.totalInvested += amount;
+      this.totalInvested += price * roundedSize;
 
       const trade = {
         time: new Date().toISOString(),
         question: question.substring(0, 80),
         side,
         price,
-        size: size.toFixed(2),
-        amount,
+        size: roundedSize.toFixed(2),
+        amount: (price * roundedSize).toFixed(2),
         edge: (edge * 100).toFixed(1) + '%',
         orderId: result.orderID || result.id || 'placed',
         status: 'filled',
@@ -573,12 +583,16 @@ class Strategy {
               this.positions.delete(tokenId);
               continue;
             }
-            const sellSize = Math.min(pos.size, actualShares);
+            const sellSize = Math.floor(Math.min(pos.size, actualShares) * 100) / 100;
+            if (sellSize < 1) {
+              console.log(`[REBALANCE] Sell size too small: ${sellSize}`);
+              continue;
+            }
 
             await api.placeSellOrder({
               tokenId,
               price: parseFloat(currentPrice.toFixed(2)),
-              size: parseFloat(sellSize.toFixed(2)),
+              size: sellSize,
               tickSize: '0.01',
               negRisk: pos.negRisk || false,
             });

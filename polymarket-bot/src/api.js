@@ -147,15 +147,27 @@ class PolymarketAPI {
     return Math.max(0.01, Math.min(0.99, parseFloat(price.toFixed(2))));
   }
 
+  // ---- Round size so maker amount (price*size) has ≤ 2 decimals ----
+  _roundSize(price, size) {
+    // Taker amount (size/shares) max 4 decimals
+    // Maker amount (price*size = cost) max 2 decimals
+    let s = Math.floor(size * 10000) / 10000; // 4 decimal taker
+    // Ensure maker amount has ≤ 2 decimals by adjusting size
+    const cost = parseFloat((price * s).toFixed(2));
+    s = parseFloat((cost / price).toFixed(4));
+    return Math.max(0.01, s);
+  }
+
   // ---- CLOB: Place a buy order ----
   async placeBuyOrder({ tokenId, price, size, tickSize = '0.01', negRisk = false }) {
     const clampedPrice = this._clampPrice(price);
+    const roundedSize = this._roundSize(clampedPrice, size);
     const order = await this.client.createAndPostOrder(
       {
         tokenID: tokenId,
         price: clampedPrice,
         side: Side.BUY,
-        size: parseFloat(Math.max(0.01, size).toFixed(2)),
+        size: roundedSize,
       },
       {
         tickSize,
@@ -169,12 +181,13 @@ class PolymarketAPI {
   // ---- CLOB: Place a sell order ----
   async placeSellOrder({ tokenId, price, size, tickSize = '0.01', negRisk = false }) {
     const clampedPrice = this._clampPrice(price);
+    const roundedSize = this._roundSize(clampedPrice, size);
     const order = await this.client.createAndPostOrder(
       {
         tokenID: tokenId,
         price: clampedPrice,
         side: Side.SELL,
-        size: parseFloat(Math.max(0.01, size).toFixed(2)),
+        size: roundedSize,
       },
       {
         tickSize,
@@ -188,12 +201,13 @@ class PolymarketAPI {
   // ---- CLOB: Place a market (FOK) buy ----
   async placeMarketBuy({ tokenId, price, size, tickSize = '0.01', negRisk = false }) {
     const clampedPrice = this._clampPrice(price);
+    const roundedSize = this._roundSize(clampedPrice, size);
     const order = await this.client.createAndPostOrder(
       {
         tokenID: tokenId,
         price: clampedPrice,
         side: Side.BUY,
-        size: parseFloat(Math.max(0.01, size).toFixed(2)),
+        size: roundedSize,
       },
       {
         tickSize,

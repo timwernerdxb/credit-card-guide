@@ -243,13 +243,19 @@ class BTCStrategy {
       const shares = betAmount / opp.price;
       const payout = shares; // each share pays $1 if correct
 
+      const roundedShares = Math.floor(shares * 100) / 100;
+      if (roundedShares < 1) {
+        console.log(`[BTC LOTTERY] Size too small: ${roundedShares}`);
+        continue;
+      }
+
       console.log(`[BTC LOTTERY] ${opp.side.toUpperCase()} on "${opp.question.substring(0, 60)}..." @ ${(opp.price * 100).toFixed(1)}¢ | $${betAmount} (max $${maxBet}) -> potential $${payout.toFixed(2)} payout`);
 
       try {
         const result = await api.placeBuyOrder({
           tokenId: opp.tokenId,
           price: parseFloat(opp.price.toFixed(2)),
-          size: parseFloat(shares.toFixed(2)),
+          size: roundedShares,
           tickSize: '0.01',
           negRisk: opp.negRisk,
         });
@@ -456,6 +462,8 @@ class BTCStrategy {
 
       const betAmount = this.calculateMomentumBetSize(trendStrength, price, parsed.liquidity, maxBet);
       const shares = betAmount / price;
+      const roundedShares = Math.floor(shares * 100) / 100;
+      if (roundedShares < 1) continue;
 
       console.log(`[BTC MOMENTUM] ${direction.toUpperCase()} → ${side.toUpperCase()} on "${parsed.question.substring(0, 60)}..." @ ${(price * 100).toFixed(1)}¢ | $${betAmount} (max $${maxBet})`);
 
@@ -463,7 +471,7 @@ class BTCStrategy {
         await api.placeBuyOrder({
           tokenId,
           price: parseFloat(price.toFixed(2)),
-          size: parseFloat(shares.toFixed(2)),
+          size: roundedShares,
           tickSize: '0.01',
           negRisk: parsed.negRisk,
         });
@@ -547,12 +555,16 @@ class BTCStrategy {
               this.momentumBets.splice(i, 1);
               continue;
             }
-            const sellSize = Math.min(pos.shares, actualShares);
+            const sellSize = Math.floor(Math.min(pos.shares, actualShares) * 100) / 100;
+            if (sellSize < 1) {
+              console.log(`[BTC REBALANCE] Sell size too small: ${sellSize}`);
+              continue;
+            }
 
             await api.placeSellOrder({
               tokenId: pos.tokenId,
               price: parseFloat(currentPrice.toFixed(2)),
-              size: parseFloat(sellSize.toFixed(2)),
+              size: sellSize,
               tickSize: '0.01',
               negRisk: pos.negRisk || false,
             });
@@ -839,11 +851,18 @@ class BTCStrategy {
     }
 
     const shares = betAmount / price;
-    const potentialPayout = shares; // $1 per share if correct
+    const roundedShares = Math.floor(shares * 100) / 100;
+    const potentialPayout = roundedShares; // $1 per share if correct
 
     // GATE 4: Potential payout must be worth it
     if (potentialPayout < minPayout) {
       console.log(`[BTC 5M] SKIP: Payout $${potentialPayout.toFixed(2)} < minimum $${minPayout} — not worth the risk`);
+      this.lastWindowTs = market.windowTs;
+      return;
+    }
+
+    if (roundedShares < 1) {
+      console.log(`[BTC 5M] SKIP: Share size too small after rounding: ${roundedShares}`);
       this.lastWindowTs = market.windowTs;
       return;
     }
@@ -854,7 +873,7 @@ class BTCStrategy {
       await api.placeBuyOrder({
         tokenId,
         price: parseFloat(price.toFixed(2)),
-        size: parseFloat(shares.toFixed(2)),
+        size: roundedShares,
         tickSize: '0.01',
         negRisk: market.negRisk,
       });

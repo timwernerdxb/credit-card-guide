@@ -95,12 +95,17 @@ class Strategy {
       for (const [tokenId, pos] of this.positions.entries()) {
         try {
           const balance = await api.getBalanceAllowance(tokenId);
-          const actualShares = balance ? parseFloat(balance.balance || 0) / 1e6 : 0;
+          // Debug: log raw balance response for first position
+          if (toRemove.length === 0 && balance) {
+            console.log(`[SYNC] DEBUG: raw balance response: ${JSON.stringify(balance).substring(0, 200)}`);
+          }
+          // Try both formats: raw number and divided by 1e6
+          const rawBal = balance ? parseFloat(balance.balance || 0) : 0;
+          const actualShares = rawBal > 1e6 ? rawBal / 1e6 : rawBal;
           if (actualShares < 0.01) {
-            console.log(`[SYNC] Removing "${(pos.question || '').substring(0, 40)}..." — no shares held`);
+            console.log(`[SYNC] Removing "${(pos.question || '').substring(0, 40)}..." — no shares (raw: ${rawBal})`);
             toRemove.push(tokenId);
           } else {
-            // Update size to actual balance
             pos.size = actualShares;
             console.log(`[SYNC] Verified: "${(pos.question || '').substring(0, 40)}..." — ${actualShares.toFixed(2)} shares`);
           }
@@ -135,10 +140,22 @@ class Strategy {
       }
 
       if (trades && trades.length > 0) {
+        // Debug: log match_time format
+        console.log(`[SYNC] DEBUG: match_time sample: "${trades[0].match_time}" (type: ${typeof trades[0].match_time})`);
+
         // Only count trades from PNL_START_DATE onward
         const startTs = new Date(config.pnlStartDate).getTime();
         trades = trades.filter(t => {
-          const tradeTime = new Date(t.match_time || t.last_update || 0).getTime();
+          const raw = t.match_time || t.last_update || 0;
+          // Handle Unix seconds (10 digits) vs milliseconds (13 digits) vs ISO string
+          let tradeTime;
+          if (typeof raw === 'number' && raw < 1e12) {
+            tradeTime = raw * 1000; // seconds → milliseconds
+          } else if (typeof raw === 'number') {
+            tradeTime = raw;
+          } else {
+            tradeTime = new Date(raw).getTime();
+          }
           return tradeTime >= startTs;
         });
 
@@ -192,7 +209,8 @@ class Strategy {
 
           try {
             const balance = await api.getBalanceAllowance(tokenId);
-            const actualShares = balance ? parseFloat(balance.balance || 0) / 1e6 : 0;
+            const rawBal = balance ? parseFloat(balance.balance || 0) : 0;
+            const actualShares = rawBal > 1e6 ? rawBal / 1e6 : rawBal;
             if (actualShares >= 1.0) {
               const avgBuy = pos.totalCost / pos.bought;
               this.positions.set(tokenId, {
@@ -548,7 +566,8 @@ class Strategy {
           try {
             // Check actual balance before selling
             const balance = await api.getBalanceAllowance(tokenId);
-            const actualShares = balance ? parseFloat(balance.balance || 0) / 1e6 : 0;
+            const rawBal = balance ? parseFloat(balance.balance || 0) : 0;
+            const actualShares = rawBal > 1e6 ? rawBal / 1e6 : rawBal;
             if (actualShares < 0.01) {
               console.log(`[REBALANCE] No shares held for this position (balance: ${actualShares}), removing from tracking`);
               this.positions.delete(tokenId);

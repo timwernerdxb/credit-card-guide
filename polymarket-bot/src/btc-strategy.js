@@ -540,7 +540,8 @@ class BTCStrategy {
           try {
             // Check actual balance before selling
             const balance = await api.getBalanceAllowance(pos.tokenId);
-            const actualShares = balance ? parseFloat(balance.balance || 0) / 1e6 : 0;
+            const rawBal = balance ? parseFloat(balance.balance || 0) : 0;
+            const actualShares = rawBal > 1e6 ? rawBal / 1e6 : rawBal;
             if (actualShares < 0.01) {
               console.log(`[BTC REBALANCE] No shares held, removing from tracking`);
               this.momentumBets.splice(i, 1);

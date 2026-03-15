@@ -380,7 +380,8 @@ class Strategy {
     console.log(`[TRADE] ${side.toUpperCase()} on "${question.substring(0, 60)}..." @ ${price.toFixed(3)} | edge: ${(edge * 100).toFixed(1)}% | $${amount}`);
 
     try {
-      const result = await api.placeBuyOrder({
+      // Use market order (FOK) so it fills immediately or not at all
+      const result = await api.placeMarketBuy({
         tokenId,
         price: parseFloat(price.toFixed(2)),
         size: parseFloat(size.toFixed(2)),
@@ -389,6 +390,13 @@ class Strategy {
       });
 
       this.stats.ordersPlaced++;
+
+      // Only track if order was successful
+      // FOK orders either fill completely or fail — no "live" phantom positions
+      if (result.status === 'live') {
+        console.log(`[TRADE] Order is live (limit), not tracking until filled`);
+        return;
+      }
 
       // Track position
       this.positions.set(tokenId, {

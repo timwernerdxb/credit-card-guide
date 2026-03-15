@@ -276,6 +276,12 @@ class Strategy {
       console.error('[SYNC] P&L calc error:', err.message);
     }
 
+    // Recalculate totalInvested from ALL positions (verified + discovered)
+    this.totalInvested = 0;
+    for (const [, pos] of this.positions.entries()) {
+      this.totalInvested += (pos.avgPrice || 0) * (pos.size || 0);
+    }
+
     console.log(`[SYNC] Final: ${this.positions.size} positions, P&L: $${this.pnl.toFixed(2)}, invested: $${this.totalInvested.toFixed(2)}`);
     this.persist();
   }
@@ -699,7 +705,6 @@ class Strategy {
             });
 
             this.pnl += profit;
-            this.totalInvested -= pos.avgPrice * pos.size;
             this.positions.delete(tokenId);
 
             this.tradeLog.unshift({

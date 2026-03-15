@@ -140,7 +140,24 @@ class Strategy {
         return;
       }
 
-      console.log(`[SYNC] Found ${trades.length} trades, calculating P&L...`);
+      // Filter to today's trades only
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayTs = todayStart.getTime();
+
+      trades = trades.filter(t => {
+        const tradeTime = new Date(t.match_time || t.last_update || 0).getTime();
+        return tradeTime >= todayTs;
+      });
+
+      console.log(`[SYNC] ${trades.length} trades from today, calculating P&L...`);
+
+      if (trades.length === 0) {
+        console.log('[SYNC] No trades today, P&L starts at $0');
+        this.pnl = 0;
+        this.persist();
+        return;
+      }
 
       // Build net position per tokenId
       const netPositions = new Map();

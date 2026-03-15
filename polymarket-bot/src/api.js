@@ -79,20 +79,30 @@ class PolymarketAPI {
 
     try {
       const axios = require('axios');
-      const parsed = new URL(config.proxyUrl);
+      const { HttpsProxyAgent } = require('https-proxy-agent');
+      const agent = new HttpsProxyAgent(config.proxyUrl);
 
-      // Use axios native proxy config (no agent = no circular refs)
-      axios.defaults.proxy = {
-        protocol: parsed.protocol,
-        host: parsed.hostname,
-        port: parseInt(parsed.port),
-        auth: parsed.username ? {
-          username: decodeURIComponent(parsed.username),
-          password: decodeURIComponent(parsed.password),
-        } : undefined,
-      };
+      // Inject agent per request
+      axios.interceptors.request.use((reqConfig) => {
+        reqConfig.httpsAgent = agent;
+        reqConfig.httpAgent = agent;
+        reqConfig.proxy = false;
+        return reqConfig;
+      });
 
-      console.log(`[PROXY] Axios proxy set: ${parsed.hostname}:${parsed.port}`);
+      // Strip agents from errors to prevent circular JSON crash
+      axios.interceptors.response.use(
+        (response) => response,
+        (error) => {
+          if (error.config) {
+            delete error.config.httpsAgent;
+            delete error.config.httpAgent;
+          }
+          return Promise.reject(error);
+        }
+      );
+
+      console.log('[PROXY] Axios interceptors set for proxy');
     } catch (err) {
       console.warn('[PROXY] Could not patch axios:', err.message);
     }

@@ -95,7 +95,7 @@ class Strategy {
       for (const [tokenId, pos] of this.positions.entries()) {
         try {
           const balance = await api.getBalanceAllowance(tokenId);
-          // Debug: log raw balance response for first position
+          // Debug: log raw balance response for first few positions
           if (toRemove.length === 0 && balance) {
             console.log(`[SYNC] DEBUG: raw balance response: ${JSON.stringify(balance).substring(0, 200)}`);
           }
@@ -110,9 +110,23 @@ class Strategy {
             console.log(`[SYNC] Verified: "${(pos.question || '').substring(0, 40)}..." — ${actualShares.toFixed(2)} shares`);
           }
         } catch (err) {
-          // Balance check failed (invalid token, resolved market, etc.) — remove it
-          console.log(`[SYNC] Removing "${(pos.question || '').substring(0, 40)}..." — balance check failed`);
-          toRemove.push(tokenId);
+          // Balance check failed — but market might still be active.
+          // Try getMidpoint to see if the market is tradeable. If yes, keep the position
+          // (some tokens return "Invalid asset type" from balance but are still live).
+          try {
+            const mid = await api.getMidpoint(tokenId);
+            const midPrice = parseFloat(mid.mid || mid || 0);
+            if (midPrice > 0) {
+              console.log(`[SYNC] Balance check failed for "${(pos.question || '').substring(0, 40)}..." but market active (mid: ${midPrice.toFixed(3)}) — keeping`);
+              pos.currentPrice = midPrice;
+            } else {
+              console.log(`[SYNC] Removing "${(pos.question || '').substring(0, 40)}..." — balance check failed, no mid`);
+              toRemove.push(tokenId);
+            }
+          } catch {
+            console.log(`[SYNC] Removing "${(pos.question || '').substring(0, 40)}..." — balance + midpoint both failed`);
+            toRemove.push(tokenId);
+          }
         }
       }
       for (const id of toRemove) {
@@ -208,9 +222,26 @@ class Strategy {
           if (this.positions.has(tokenId)) continue; // already tracking
 
           try {
-            const balance = await api.getBalanceAllowance(tokenId);
-            const rawBal = balance ? parseFloat(balance.balance || 0) : 0;
-            const actualShares = rawBal > 1e6 ? rawBal / 1e6 : rawBal;
+            let actualShares = 0;
+            try {
+              const balance = await api.getBalanceAllowance(tokenId);
+              const rawBal = balance ? parseFloat(balance.balance || 0) : 0;
+              actualShares = rawBal > 1e6 ? rawBal / 1e6 : rawBal;
+            } catch {
+              // Balance check failed — check if market is still active via midpoint
+              try {
+                const mid = await api.getMidpoint(tokenId);
+                const midPrice = parseFloat(mid.mid || mid || 0);
+                if (midPrice > 0) {
+                  // Market active, use net shares from trade history
+                  actualShares = pos.bought - pos.sold;
+                  console.log(`[SYNC] Balance API failed but market active (mid: ${midPrice.toFixed(3)}), using net shares: ${actualShares.toFixed(2)}`);
+                }
+              } catch {
+                // Both failed — skip
+              }
+            }
+
             if (actualShares >= 1.0) {
               const avgBuy = pos.totalCost / pos.bought;
               this.positions.set(tokenId, {
@@ -228,7 +259,7 @@ class Strategy {
               console.log(`[SYNC] Discovered position: ${actualShares.toFixed(2)} shares @ ${avgBuy.toFixed(3)} (token: ${tokenId.substring(0, 16)}...)`);
             }
           } catch {
-            // skip — invalid token
+            // skip
           }
         }
         if (discovered > 0) {
@@ -247,6 +278,7 @@ class Strategy {
 
   // ---- Fetch market names for discovered positions ----
   async _enrichDiscoveredPositions() {
+    // First try bulk lookup from top markets
     try {
       const markets = await api.getMarkets({ limit: 100 });
       for (const market of markets) {
@@ -264,7 +296,27 @@ class Strategy {
         }
       }
     } catch (err) {
-      console.warn('[SYNC] Could not enrich market names:', err.message);
+      console.warn('[SYNC] Could not fetch bulk markets:', err.message);
+    }
+
+    // For any still-unmatched positions, try individual lookup via Gamma token search
+    for (const [tokenId, pos] of this.positions.entries()) {
+      if (!pos.question.startsWith('Token ')) continue;
+      try {
+        const url = `${require('./config').gammaBaseUrl}/markets?clob_token_ids=${tokenId}`;
+        const res = await require('node-fetch')(url);
+        if (res.ok) {
+          const markets = await res.json();
+          if (markets && markets.length > 0) {
+            pos.question = markets[0].question;
+            pos.marketId = markets[0].id || '';
+            pos.negRisk = markets[0].negRisk || false;
+            console.log(`[SYNC] Matched via token lookup: "${markets[0].question.substring(0, 50)}..."`);
+          }
+        }
+      } catch {
+        // skip
+      }
     }
   }
 
@@ -575,13 +627,18 @@ class Strategy {
 
           try {
             // Check actual balance before selling
-            const balance = await api.getBalanceAllowance(tokenId);
-            const rawBal = balance ? parseFloat(balance.balance || 0) : 0;
-            const actualShares = rawBal > 1e6 ? rawBal / 1e6 : rawBal;
-            if (actualShares < 0.01) {
-              console.log(`[REBALANCE] No shares held for this position (balance: ${actualShares}), removing from tracking`);
-              this.positions.delete(tokenId);
-              continue;
+            let actualShares = pos.size; // fallback to tracked size
+            try {
+              const balance = await api.getBalanceAllowance(tokenId);
+              const rawBal = balance ? parseFloat(balance.balance || 0) : 0;
+              actualShares = rawBal > 1e6 ? rawBal / 1e6 : rawBal;
+              if (actualShares < 0.01) {
+                console.log(`[REBALANCE] No shares held for this position (balance: ${actualShares}), removing from tracking`);
+                this.positions.delete(tokenId);
+                continue;
+              }
+            } catch (balErr) {
+              console.log(`[REBALANCE] Balance check failed (${balErr.message}), using tracked size: ${pos.size}`);
             }
             const sellSize = Math.floor(Math.min(pos.size, actualShares) * 100) / 100;
             if (sellSize < 1) {

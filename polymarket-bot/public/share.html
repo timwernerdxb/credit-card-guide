@@ -36,6 +36,13 @@
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
   .updated { font-size: 11px; color: var(--muted); }
 
+  .admin-btn {
+    padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: 1px solid var(--border); background: var(--bg3);
+    color: var(--muted); font-family: inherit; transition: 0.15s;
+  }
+  .admin-btn:hover { border-color: var(--dim); color: var(--text); }
+
   /* Hero stats */
   .hero {
     display: flex; align-items: center; justify-content: center;
@@ -114,6 +121,7 @@
   <div class="header-right">
     <div class="live-badge"><div class="live-dot"></div> LIVE</div>
     <span class="updated" id="lastUpdate"></span>
+    <button class="admin-btn" onclick="goAdmin()">Admin</button>
   </div>
 </div>
 
@@ -376,6 +384,13 @@
     const d = document.createElement('div');
     d.textContent = s || '';
     return d.innerHTML;
+  }
+
+  function goAdmin() {
+    const key = prompt('Enter admin key:');
+    if (key) {
+      window.location.href = '/admin?key=' + encodeURIComponent(key);
+    }
   }
 
   fetchStatus();

@@ -113,27 +113,25 @@ class Strategy {
       console.log(`[SYNC] Found ${trades.length} trades. Sample trade fields: ${JSON.stringify(Object.keys(trades[0]))}`);
       console.log(`[SYNC] Sample trade: ${JSON.stringify(trades[0]).substring(0, 300)}`);
 
-      // Log unique side/trader_side values and statuses to debug
-      const sideValues = new Set();
-      const traderSideValues = new Set();
-      const statusValues = new Set();
-      for (const t of trades.slice(0, 20)) {
-        sideValues.add(t.side);
-        traderSideValues.add(t.trader_side);
-        statusValues.add(t.status);
-      }
-      console.log(`[SYNC] DEBUG: side values: ${JSON.stringify([...sideValues])}`);
-      console.log(`[SYNC] DEBUG: trader_side values: ${JSON.stringify([...traderSideValues])}`);
-      console.log(`[SYNC] DEBUG: status values: ${JSON.stringify([...statusValues])}`);
-      console.log(`[SYNC] DEBUG: sample sizes: ${trades.slice(0, 5).map(t => t.size).join(', ')}`);
-      console.log(`[SYNC] DEBUG: sample prices: ${trades.slice(0, 5).map(t => t.price).join(', ')}`);
+      // Filter to today's trades only
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayTs = todayStart.getTime();
 
-      // Log first 3 trades fully parsed
-      for (let i = 0; i < Math.min(3, trades.length); i++) {
-        const t = trades[i];
-        const ts = String(t.trader_side || t.side || '').toUpperCase().trim();
-        console.log(`[SYNC] TRADE[${i}]: side="${t.side}" trader_side="${t.trader_side}" → parsed="${ts}" | size=${t.size} price=${t.price} status="${t.status}" | token=${String(t.asset_id).substring(0, 20)}...`);
+      const todayTrades = trades.filter(t => {
+        const tradeTime = new Date(t.match_time || t.last_update || 0).getTime();
+        return tradeTime >= todayTs;
+      });
+
+      console.log(`[SYNC] Filtered to ${todayTrades.length} trades from today (out of ${trades.length} total)`);
+
+      if (todayTrades.length === 0) {
+        console.log('[SYNC] No trades today, keeping stored state');
+        return;
       }
+
+      // Use today's trades for position reconstruction
+      trades = todayTrades;
 
       // Build net position per tokenId from trade history
       // CLOB client trades may use different field names:
@@ -206,8 +204,11 @@ class Strategy {
         }
 
         // Still holding shares? Add as position
-        if (netShares > 0.01 && avgBuyPrice > 0) {
+        // Skip tiny positions (< 1 share or < $0.50 invested) — likely dust from rounding or redeemed markets
+        if (netShares >= 1.0 && avgBuyPrice > 0) {
           const invested = avgBuyPrice * netShares;
+          if (invested < 0.50) continue; // skip dust
+
           syncedInvested += invested;
 
           // Only add if we don't already track this position
@@ -224,7 +225,7 @@ class Strategy {
               synced: true,
             });
             syncedCount++;
-            console.log(`[SYNC] Restored position: ${netShares.toFixed(2)} shares @ ${avgBuyPrice.toFixed(3)} (token: ${tokenId.substring(0, 16)}...)`);
+            console.log(`[SYNC] Restored position: ${netShares.toFixed(2)} shares @ ${avgBuyPrice.toFixed(3)} ($${invested.toFixed(2)} invested) (token: ${tokenId.substring(0, 16)}...)`);
           }
         }
       }

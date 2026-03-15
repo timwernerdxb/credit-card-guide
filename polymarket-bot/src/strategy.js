@@ -87,11 +87,12 @@ class Strategy {
   async syncFromAPI() {
     console.log('[SYNC] Calculating realized P&L from Polymarket trade history...');
 
-    // Clear any stale synced positions from previous broken syncs
-    for (const [tokenId, pos] of this.positions.entries()) {
-      if (pos.synced) {
-        this.positions.delete(tokenId);
-      }
+    // Clear ALL restored positions — they're unreliable from old syncs.
+    // Bot will only track positions it opens from now on.
+    if (this.positions.size > 0) {
+      console.log(`[SYNC] Clearing ${this.positions.size} stale restored positions`);
+      this.positions.clear();
+      this.totalInvested = 0;
     }
 
     try {

@@ -21,6 +21,14 @@ module.exports = {
   minEdge: parseFloat(process.env.MIN_EDGE || '0.05'),
   strategy: process.env.STRATEGY || 'value',
 
+  // BTC strategy
+  btcEnabled: process.env.BTC_ENABLED !== 'false', // on by default
+  btcLotteryAmount: parseFloat(process.env.BTC_LOTTERY_AMOUNT || '1'),
+  btcMomentumAmount: parseFloat(process.env.BTC_MOMENTUM_AMOUNT || '5'),
+  btcMaxLotteryBets: parseInt(process.env.BTC_MAX_LOTTERY_BETS || '10'),
+  btcLotteryMaxPrice: parseFloat(process.env.BTC_LOTTERY_MAX_PRICE || '0.02'), // max 2¢ per share
+  btcScanInterval: 5 * 60 * 1000, // check BTC markets every 5 min
+
   // Server
   port: parseInt(process.env.PORT || '3000'),
 

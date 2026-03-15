@@ -3,13 +3,13 @@ const path = require('path');
 const config = require('./config');
 const api = require('./api');
 const strategy = require('./strategy');
+const btcStrategy = require('./btc-strategy');
 
 const app = express();
 app.use(express.json());
 
 // ============================================
 // Admin auth middleware
-// Protects control endpoints with ADMIN_KEY
 // ============================================
 
 function requireAdmin(req, res, next) {
@@ -26,15 +26,17 @@ function requireAdmin(req, res, next) {
 }
 
 // ============================================
-// Public API — read-only, no auth needed
+// Public API — read-only
 // ============================================
 
 app.get('/api/status', (req, res) => {
   const state = strategy.getState();
+  const btcState = btcStrategy.getState();
   res.json({
     ok: true,
     uptime: process.uptime(),
     ...state,
+    btc: btcState,
   });
 });
 
@@ -44,7 +46,7 @@ app.get('/api/status', (req, res) => {
 
 app.post('/api/scan', requireAdmin, async (req, res) => {
   try {
-    await strategy.scan();
+    await Promise.all([strategy.scan(), btcStrategy.scan()]);
     res.json({ ok: true, message: 'Scan completed' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -53,7 +55,7 @@ app.post('/api/scan', requireAdmin, async (req, res) => {
 
 app.post('/api/rebalance', requireAdmin, async (req, res) => {
   try {
-    await strategy.rebalance();
+    await Promise.all([strategy.rebalance(), btcStrategy.rebalance()]);
     res.json({ ok: true, message: 'Rebalance completed' });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -76,12 +78,10 @@ app.post('/api/start', requireAdmin, (req, res) => {
 // Routes
 // ============================================
 
-// Public read-only dashboard (share this with friends)
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'share.html'));
 });
 
-// Admin dashboard (requires ?key=YOUR_ADMIN_KEY)
 app.get('/admin', (req, res) => {
   const adminKey = process.env.ADMIN_KEY;
   if (!adminKey || req.query.key !== adminKey) {
@@ -96,22 +96,30 @@ app.get('/admin', (req, res) => {
 
 let scanTimer = null;
 let rebalanceTimer = null;
+let btcTimer = null;
 
 function startTimers() {
   if (scanTimer) clearInterval(scanTimer);
   if (rebalanceTimer) clearInterval(rebalanceTimer);
+  if (btcTimer) clearInterval(btcTimer);
+
   scanTimer = setInterval(() => strategy.scan(), config.scanInterval);
-  rebalanceTimer = setInterval(() => strategy.rebalance(), config.rebalanceInterval);
+  rebalanceTimer = setInterval(() => {
+    strategy.rebalance();
+    btcStrategy.rebalance();
+  }, config.rebalanceInterval);
+  btcTimer = setInterval(() => btcStrategy.scan(), config.btcScanInterval);
 }
 
 function stopTimers() {
   if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
   if (rebalanceTimer) { clearInterval(rebalanceTimer); rebalanceTimer = null; }
+  if (btcTimer) { clearInterval(btcTimer); btcTimer = null; }
 }
 
 app.listen(config.port, async () => {
   console.log('='.repeat(50));
-  console.log('  POLYMARKET TRADING BOT v2.0');
+  console.log('  POLYMARKET TRADING BOT v2.1');
   console.log('  Using official @polymarket/clob-client SDK');
   console.log('='.repeat(50));
   console.log(`  Public dashboard: http://localhost:${config.port}`);
@@ -120,11 +128,13 @@ app.listen(config.port, async () => {
   console.log(`  Trade size: $${config.tradeAmountUsdc}`);
   console.log(`  Max positions: ${config.maxOpenPositions}`);
   console.log(`  Min edge:   ${(config.minEdge * 100).toFixed(0)}%`);
+  console.log(`  BTC enabled: ${config.btcEnabled}`);
+  console.log(`  BTC lottery: $${config.btcLotteryAmount}/bet (max ${config.btcMaxLotteryBets} bets)`);
+  console.log(`  BTC momentum: $${config.btcMomentumAmount}/trade`);
   console.log('='.repeat(50));
 
   if (!config.privateKey) {
     console.log('[BOOT] No PRIVATE_KEY set. Dashboard running in monitor-only mode.');
-    console.log('[BOOT] Add PRIVATE_KEY env var on Railway to enable trading.');
     return;
   }
 
@@ -132,11 +142,13 @@ app.listen(config.port, async () => {
     await api.init();
     console.log('[BOOT] Authenticated with Polymarket CLOB API');
 
-    // Initial scan
+    // Initial scans
     await strategy.scan();
+    await btcStrategy.scan();
+
     // Start recurring timers
     startTimers();
-    console.log('[BOOT] Trading loops started');
+    console.log('[BOOT] All trading loops started (general + BTC)');
   } catch (err) {
     console.error('[BOOT] Failed to initialize:', err.message);
     console.error('[BOOT] Check your PRIVATE_KEY and FUNDER_ADDRESS env vars');

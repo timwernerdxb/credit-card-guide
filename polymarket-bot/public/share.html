@@ -171,6 +171,37 @@
   <div id="tradeLogTable"></div>
 </div>
 
+<!-- BTC Strategy -->
+<div class="section" id="btcSection" style="border-color: var(--yellow)">
+  <div class="section-header" style="color:var(--yellow)">
+    <span>Bitcoin Strategy</span>
+    <span id="btcSentiment" style="font-size:12px"></span>
+  </div>
+  <div style="padding:16px">
+    <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px">
+      <div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">BTC P&L</div>
+        <div style="font-size:20px;font-weight:700" id="btcPnl">$0.00</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Total Bet</div>
+        <div style="font-size:20px;font-weight:700" id="btcTotalBet">$0.00</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Lottery Bets</div>
+        <div style="font-size:20px;font-weight:700" id="btcLotteryCount">0</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Momentum Bets</div>
+        <div style="font-size:20px;font-weight:700" id="btcMomentumCount">0</div>
+      </div>
+    </div>
+  </div>
+  <div id="btcLotteryTable"></div>
+  <div id="btcMomentumTable"></div>
+  <div id="btcTradeLog"></div>
+</div>
+
 <div class="footer">
   Auto-refreshes every 10 seconds
 </div>
@@ -249,6 +280,89 @@
               <td>${(parseFloat(t.price) * 100).toFixed(1)}\u00a2</td>
               <td>$${parseFloat(t.amount).toFixed(2)}</td>
               <td><span class="badge badge-${t.status}">${t.status}${t.pnl ? ' ' + t.pnl : ''}</span></td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+
+    // BTC Strategy
+    const btc = data.btc || {};
+    const btcPnl = btc.pnl || 0;
+    const btcPnlEl = document.getElementById('btcPnl');
+    btcPnlEl.textContent = `${btcPnl >= 0 ? '+' : ''}$${btcPnl.toFixed(2)}`;
+    btcPnlEl.style.color = btcPnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+    document.getElementById('btcTotalBet').textContent = `$${(btc.totalBet || 0).toFixed(2)}`;
+    document.getElementById('btcLotteryCount').textContent = (btc.lotteryBets || []).length;
+    document.getElementById('btcMomentumCount').textContent = (btc.momentumBets || []).length;
+
+    if (btc.sentiment !== null && btc.sentiment !== undefined) {
+      const s = (btc.sentiment * 100).toFixed(0);
+      const sentEl = document.getElementById('btcSentiment');
+      sentEl.textContent = `Sentiment: ${s}% bullish`;
+      sentEl.style.color = btc.sentiment > 0.55 ? 'var(--green)' : btc.sentiment < 0.45 ? 'var(--red)' : 'var(--dim)';
+    }
+
+    // Lottery bets
+    const lottery = btc.lotteryBets || [];
+    if (lottery.length === 0) {
+      document.getElementById('btcLotteryTable').innerHTML = '<div class="empty">No lottery bets yet</div>';
+    } else {
+      document.getElementById('btcLotteryTable').innerHTML = `
+        <div style="padding:0 16px 8px;font-size:12px;font-weight:600;color:var(--yellow)">LOTTERY BETS ($1 each)</div>
+        <table>
+          <tr><th>Market</th><th>Side</th><th>Price</th><th>Bet</th><th>Potential Payout</th></tr>
+          ${lottery.map(b => `
+            <tr>
+              <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.question)}</td>
+              <td><span class="badge badge-${b.side}">${b.side.toUpperCase()}</span></td>
+              <td>${(b.price * 100).toFixed(1)}\u00a2</td>
+              <td>$${b.amount.toFixed(2)}</td>
+              <td style="color:var(--green);font-weight:700">$${b.potentialPayout.toFixed(2)}</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+
+    // Momentum bets
+    const momentum = btc.momentumBets || [];
+    if (momentum.length === 0) {
+      document.getElementById('btcMomentumTable').innerHTML = '';
+    } else {
+      document.getElementById('btcMomentumTable').innerHTML = `
+        <div style="padding:16px 16px 8px;font-size:12px;font-weight:600;color:var(--blue)">MOMENTUM BETS</div>
+        <table>
+          <tr><th>Market</th><th>Side</th><th>Direction</th><th>Price</th><th>Amount</th></tr>
+          ${momentum.map(b => `
+            <tr>
+              <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.question)}</td>
+              <td><span class="badge badge-${b.side}">${b.side.toUpperCase()}</span></td>
+              <td style="color:${b.direction === 'bullish' ? 'var(--green)' : 'var(--red)'};font-weight:600">${(b.direction || '').toUpperCase()}</td>
+              <td>${(b.price * 100).toFixed(1)}\u00a2</td>
+              <td>$${b.amount.toFixed(2)}</td>
+            </tr>
+          `).join('')}
+        </table>
+      `;
+    }
+
+    // BTC trade log
+    const btcTrades = btc.tradeLog || [];
+    if (btcTrades.length > 0) {
+      document.getElementById('btcTradeLog').innerHTML = `
+        <div style="padding:16px 16px 8px;font-size:12px;font-weight:600;color:var(--dim)">BTC TRADE LOG</div>
+        <table>
+          <tr><th>Time</th><th>Type</th><th>Market</th><th>Side</th><th>Price</th><th>Status</th></tr>
+          ${btcTrades.map(t => `
+            <tr>
+              <td style="color:var(--muted);white-space:nowrap">${new Date(t.time).toLocaleTimeString()}</td>
+              <td><span style="color:${t.type === 'LOTTERY' ? 'var(--yellow)' : 'var(--blue)'};font-weight:600;font-size:11px">${t.type}</span></td>
+              <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.question)}</td>
+              <td><span class="badge badge-${(t.side||'').includes('yes') ? 'yes' : 'no'}">${(t.side||'').toUpperCase()}</span></td>
+              <td>${(parseFloat(t.price) * 100).toFixed(1)}\u00a2</td>
+              <td>${t.potentialPayout ? '<span style="color:var(--green)">' + t.potentialPayout + '</span>' : t.status}${t.pnl ? ' ' + t.pnl : ''}</td>
             </tr>
           `).join('')}
         </table>

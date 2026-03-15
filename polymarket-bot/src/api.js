@@ -98,18 +98,18 @@ class PolymarketAPI {
     }
   }
 
-  // ---- Public: Fetch markets from Gamma API ----
+  // ---- Public: Fetch markets from Gamma API (no proxy needed, public API) ----
   async getMarkets({ limit = 100, closed = false } = {}) {
     const url = `${this.gammaBase}/markets?closed=${closed}&limit=${limit}&order=volume24hr&ascending=false`;
-    const res = await proxiedFetch(url);
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`Gamma API error: ${res.status}`);
     return res.json();
   }
 
-  // ---- Public: Single market ----
+  // ---- Public: Single market (no proxy needed) ----
   async getMarket(conditionId) {
     const url = `${this.gammaBase}/markets/${conditionId}`;
-    const res = await proxiedFetch(url);
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`Gamma market error: ${res.status}`);
     return res.json();
   }

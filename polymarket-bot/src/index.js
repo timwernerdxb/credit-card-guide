@@ -4,6 +4,7 @@ const config = require('./config');
 const api = require('./api');
 const strategy = require('./strategy');
 const btcStrategy = require('./btc-strategy');
+const store = require('./store');
 
 const app = express();
 app.use(express.json());
@@ -137,6 +138,12 @@ app.listen(config.port, async () => {
     console.log('[BOOT] No PRIVATE_KEY set. Dashboard running in monitor-only mode.');
     return;
   }
+
+  // Restore persisted state
+  store.load();
+  strategy.restore();
+  btcStrategy.restore();
+  store.startAutoSave();
 
   try {
     await api.init();

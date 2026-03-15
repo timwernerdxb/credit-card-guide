@@ -1,5 +1,6 @@
 const api = require('./api');
 const config = require('./config');
+const store = require('./store');
 
 // ============================================
 // BTC-Specific Trading Strategy
@@ -20,6 +21,7 @@ class BTCStrategy {
     this.momentumBets = [];
     this.tradeLog = [];
     this.pnl = 0;
+    this.unrealizedPnl = 0;
     this.totalBet = 0;
     this.stats = {
       scans: 0,
@@ -29,6 +31,36 @@ class BTCStrategy {
       lastScan: null,
     };
     this.priceHistory = []; // track BTC price for momentum
+  }
+
+  // ---- Restore state from persistent storage ----
+  restore() {
+    const saved = store.getBTCState();
+    if (!saved || !saved.stats) return;
+
+    this.lotteryBets = saved.lotteryBets || [];
+    this.momentumBets = saved.momentumBets || [];
+    this.tradeLog = saved.tradeLog || [];
+    this.pnl = saved.pnl || 0;
+    this.totalBet = saved.totalBet || 0;
+    this.priceHistory = saved.priceHistory || [];
+    if (saved.stats) {
+      this.stats = { ...this.stats, ...saved.stats };
+    }
+    console.log(`[BTC] Restored: ${this.lotteryBets.length} lottery, ${this.momentumBets.length} momentum, P&L: $${this.pnl.toFixed(2)}`);
+  }
+
+  // ---- Persist current state ----
+  persist() {
+    store.setBTCState({
+      lotteryBets: this.lotteryBets,
+      momentumBets: this.momentumBets,
+      tradeLog: this.tradeLog,
+      pnl: this.pnl,
+      totalBet: this.totalBet,
+      stats: this.stats,
+      priceHistory: this.priceHistory,
+    });
   }
 
   // ---- Main scan: find BTC markets and trade ----
@@ -60,6 +92,8 @@ class BTCStrategy {
       this.stats.errors++;
       console.error('[BTC SCAN] Error:', err.message);
     }
+
+    this.persist();
   }
 
   // ---- Check if market is BTC-related ----
@@ -236,6 +270,7 @@ class BTCStrategy {
           status: 'placed',
         });
 
+        this.persist();
         console.log(`[BTC LOTTERY] Placed! ${shares.toFixed(0)} shares, potential $${payout.toFixed(2)}`);
       } catch (err) {
         this.stats.errors++;
@@ -450,6 +485,7 @@ class BTCStrategy {
           status: 'placed',
         });
 
+        this.persist();
         console.log(`[BTC MOMENTUM] Order placed!`);
 
         // Only take 1-2 momentum bets per scan
@@ -466,6 +502,9 @@ class BTCStrategy {
   async rebalance() {
     console.log(`[BTC REBALANCE] Checking ${this.momentumBets.length} momentum positions...`);
 
+    let totalUnrealized = 0;
+
+    // Check momentum bets
     for (let i = this.momentumBets.length - 1; i >= 0; i--) {
       const pos = this.momentumBets[i];
 
@@ -477,6 +516,11 @@ class BTCStrategy {
         const profit = (currentPrice - pos.price) * pos.shares;
         const profitPct = ((currentPrice - pos.price) / pos.price) * 100;
 
+        pos.currentPrice = currentPrice;
+        pos.unrealizedPnl = profit;
+        pos.unrealizedPct = profitPct;
+        totalUnrealized += profit;
+
         console.log(`[BTC REBALANCE] "${pos.question.substring(0, 40)}..." | ${pos.price.toFixed(3)} -> ${currentPrice.toFixed(3)} | ${profitPct >= 0 ? '+' : ''}${profitPct.toFixed(1)}%`);
 
         // Take profit at +20% or stop loss at -25%
@@ -484,10 +528,20 @@ class BTCStrategy {
           const action = profitPct >= 20 ? 'TAKE PROFIT' : 'STOP LOSS';
 
           try {
+            // Check actual balance before selling
+            const balance = await api.getBalanceAllowance(pos.tokenId);
+            const actualShares = balance ? parseFloat(balance.balance || 0) / 1e6 : 0;
+            if (actualShares < 0.01) {
+              console.log(`[BTC REBALANCE] No shares held, removing from tracking`);
+              this.momentumBets.splice(i, 1);
+              continue;
+            }
+            const sellSize = Math.min(pos.shares, actualShares);
+
             await api.placeSellOrder({
               tokenId: pos.tokenId,
               price: parseFloat(currentPrice.toFixed(2)),
-              size: parseFloat(pos.shares.toFixed(2)),
+              size: parseFloat(sellSize.toFixed(2)),
               tickSize: '0.01',
               negRisk: pos.negRisk || false,
             });
@@ -515,6 +569,25 @@ class BTCStrategy {
         console.error(`[BTC REBALANCE] Error: ${err.message}`);
       }
     }
+
+    // Check lottery bets for current value
+    for (const bet of this.lotteryBets) {
+      try {
+        const midpoint = await api.getMidpoint(bet.tokenId);
+        const currentPrice = parseFloat(midpoint.mid || midpoint || 0);
+        if (currentPrice <= 0) continue;
+
+        const profit = (currentPrice - bet.price) * bet.shares;
+        bet.currentPrice = currentPrice;
+        bet.unrealizedPnl = profit;
+        totalUnrealized += profit;
+      } catch (err) {
+        // silently skip
+      }
+    }
+
+    this.unrealizedPnl = totalUnrealized;
+    this.persist();
   }
 
   // ---- Get state for dashboard ----
@@ -525,6 +598,7 @@ class BTCStrategy {
       momentumBets: this.momentumBets,
       tradeLog: this.tradeLog.slice(0, 30),
       pnl: this.pnl,
+      unrealizedPnl: this.unrealizedPnl,
       totalBet: this.totalBet,
       priceHistory: this.priceHistory.slice(-12),
       sentiment: this.priceHistory.length > 0

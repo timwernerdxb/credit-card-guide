@@ -113,6 +113,11 @@
     <div class="value" id="pnlValue">$0.00</div>
   </div>
   <div class="stat-card">
+    <div class="label">Unrealized P&L</div>
+    <div class="value" id="unrealizedValue">$0.00</div>
+    <div class="sub" id="totalPnlSub">--</div>
+  </div>
+  <div class="stat-card">
     <div class="label">Invested</div>
     <div class="value" id="investedValue">$0.00</div>
   </div>
@@ -177,6 +182,12 @@
     pnlEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
     pnlEl.className = `value ${pnl >= 0 ? 'green' : 'red'}`;
 
+    const unrealized = (data.unrealizedPnl || 0) + ((data.btc && data.btc.unrealizedPnl) || 0);
+    const unrealizedEl = document.getElementById('unrealizedValue');
+    unrealizedEl.textContent = `${unrealized >= 0 ? '+' : ''}$${unrealized.toFixed(2)}`;
+    unrealizedEl.className = `value ${unrealized >= 0 ? 'green' : 'red'}`;
+    document.getElementById('totalPnlSub').textContent = `Total: ${(pnl + unrealized) >= 0 ? '+' : ''}$${(pnl + unrealized).toFixed(2)}`;
+
     document.getElementById('investedValue').textContent = `$${(data.totalInvested || 0).toFixed(2)}`;
     document.getElementById('positionsValue').textContent = (data.positions || []).length;
     document.getElementById('tradesValue').textContent = data.stats?.tradesPlaced || 0;
@@ -207,17 +218,21 @@
     } else {
       document.getElementById('positionsTable').innerHTML = `
         <table>
-          <tr><th>Market</th><th>Side</th><th>Size</th><th>Entry</th><th>Edge</th><th>Time</th></tr>
-          ${positions.map(p => `
+          <tr><th>Market</th><th>Side</th><th>Size</th><th>Entry</th><th>Now</th><th>P&L</th><th>Time</th></tr>
+          ${positions.map(p => {
+            const uPnl = p.unrealizedPnl || 0;
+            const uPct = p.unrealizedPct || 0;
+            return `
             <tr>
-              <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.question)}</td>
+              <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.question)}</td>
               <td><span class="badge badge-${p.side}">${p.side.toUpperCase()}</span></td>
               <td>${parseFloat(p.size).toFixed(2)}</td>
               <td>${parseFloat(p.avgPrice).toFixed(3)}</td>
-              <td>${(p.edge * 100).toFixed(1)}%</td>
+              <td>${p.currentPrice ? p.currentPrice.toFixed(3) : '--'}</td>
+              <td style="color:${uPnl >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${uPnl >= 0 ? '+' : ''}$${uPnl.toFixed(2)} (${uPct >= 0 ? '+' : ''}${uPct.toFixed(1)}%)</td>
               <td style="color:var(--muted)">${new Date(p.entryTime).toLocaleTimeString()}</td>
-            </tr>
-          `).join('')}
+            </tr>`;
+          }).join('')}
         </table>
       `;
     }

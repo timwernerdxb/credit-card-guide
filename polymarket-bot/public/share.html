@@ -132,6 +132,11 @@
     <div class="value green" id="pnlValue">$0.00</div>
   </div>
   <div class="hero-stat">
+    <div class="label">Unrealized P&L</div>
+    <div class="value" id="unrealizedValue">$0.00</div>
+    <div class="sub" id="unrealizedSub"></div>
+  </div>
+  <div class="hero-stat">
     <div class="label">Total Invested</div>
     <div class="value" id="investedValue">$0.00</div>
   </div>
@@ -188,8 +193,12 @@
   <div style="padding:16px">
     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:16px">
       <div>
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">BTC P&L</div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">BTC Realized P&L</div>
         <div style="font-size:20px;font-weight:700" id="btcPnl">$0.00</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">BTC Unrealized P&L</div>
+        <div style="font-size:20px;font-weight:700" id="btcUnrealized">$0.00</div>
       </div>
       <div>
         <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Total Bet</div>
@@ -235,11 +244,19 @@
   }
 
   function render(data) {
-    // P&L
+    // Realized P&L
     const pnl = data.pnl || 0;
     const pnlEl = document.getElementById('pnlValue');
     pnlEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
     pnlEl.className = `value ${pnl >= 0 ? 'green' : 'red'}`;
+
+    // Unrealized P&L (general + BTC)
+    const unrealized = (data.unrealizedPnl || 0) + ((data.btc && data.btc.unrealizedPnl) || 0);
+    const totalPnl = pnl + unrealized;
+    const unrealizedEl = document.getElementById('unrealizedValue');
+    unrealizedEl.textContent = `${unrealized >= 0 ? '+' : ''}$${unrealized.toFixed(2)}`;
+    unrealizedEl.className = `value ${unrealized >= 0 ? 'green' : 'red'}`;
+    document.getElementById('unrealizedSub').textContent = `Total: ${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)}`;
 
     document.getElementById('investedValue').textContent = `$${(data.totalInvested || 0).toFixed(2)}`;
     document.getElementById('strategyValue').textContent = (data.config?.strategy || 'value').toUpperCase();
@@ -256,17 +273,22 @@
     } else {
       document.getElementById('positionsTable').innerHTML = `
         <table>
-          <tr><th>Market</th><th>Side</th><th>Shares</th><th>Entry Price</th><th>Edge</th><th>Opened</th></tr>
-          ${positions.map(p => `
+          <tr><th>Market</th><th>Side</th><th>Shares</th><th>Entry</th><th>Now</th><th>P&L</th><th>Opened</th></tr>
+          ${positions.map(p => {
+            const uPnl = p.unrealizedPnl || 0;
+            const uPct = p.unrealizedPct || 0;
+            const curPrice = p.currentPrice;
+            return `
             <tr>
-              <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.question)}</td>
+              <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.question)}</td>
               <td><span class="badge badge-${p.side}">${p.side.toUpperCase()}</span></td>
               <td>${parseFloat(p.size).toFixed(2)}</td>
               <td>${(parseFloat(p.avgPrice) * 100).toFixed(1)}\u00a2</td>
-              <td>${(p.edge * 100).toFixed(1)}%</td>
+              <td>${curPrice ? (curPrice * 100).toFixed(1) + '\u00a2' : '--'}</td>
+              <td style="color:${uPnl >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${uPnl >= 0 ? '+' : ''}$${uPnl.toFixed(2)} (${uPct >= 0 ? '+' : ''}${uPct.toFixed(1)}%)</td>
               <td style="color:var(--muted)">${new Date(p.entryTime).toLocaleString()}</td>
-            </tr>
-          `).join('')}
+            </tr>`;
+          }).join('')}
         </table>
       `;
     }
@@ -301,6 +323,11 @@
     btcPnlEl.textContent = `${btcPnl >= 0 ? '+' : ''}$${btcPnl.toFixed(2)}`;
     btcPnlEl.style.color = btcPnl >= 0 ? 'var(--green)' : 'var(--red)';
 
+    const btcUnrealized = btc.unrealizedPnl || 0;
+    const btcUnrealizedEl = document.getElementById('btcUnrealized');
+    btcUnrealizedEl.textContent = `${btcUnrealized >= 0 ? '+' : ''}$${btcUnrealized.toFixed(2)}`;
+    btcUnrealizedEl.style.color = btcUnrealized >= 0 ? 'var(--green)' : 'var(--red)';
+
     document.getElementById('btcTotalBet').textContent = `$${(btc.totalBet || 0).toFixed(2)}`;
     document.getElementById('btcLotteryCount').textContent = (btc.lotteryBets || []).length;
     document.getElementById('btcMomentumCount').textContent = (btc.momentumBets || []).length;
@@ -318,18 +345,22 @@
       document.getElementById('btcLotteryTable').innerHTML = '<div class="empty">No lottery bets yet</div>';
     } else {
       document.getElementById('btcLotteryTable').innerHTML = `
-        <div style="padding:0 16px 8px;font-size:12px;font-weight:600;color:var(--yellow)">LOTTERY BETS ($1 each)</div>
+        <div style="padding:0 16px 8px;font-size:12px;font-weight:600;color:var(--yellow)">LOTTERY BETS</div>
         <table>
-          <tr><th>Market</th><th>Side</th><th>Price</th><th>Bet</th><th>Potential Payout</th></tr>
-          ${lottery.map(b => `
+          <tr><th>Market</th><th>Side</th><th>Entry</th><th>Now</th><th>Bet</th><th>P&L</th><th>Potential</th></tr>
+          ${lottery.map(b => {
+            const uPnl = b.unrealizedPnl || 0;
+            return `
             <tr>
-              <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.question)}</td>
+              <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(b.question)}</td>
               <td><span class="badge badge-${b.side}">${b.side.toUpperCase()}</span></td>
               <td>${(b.price * 100).toFixed(1)}\u00a2</td>
+              <td>${b.currentPrice ? (b.currentPrice * 100).toFixed(1) + '\u00a2' : '--'}</td>
               <td>$${b.amount.toFixed(2)}</td>
+              <td style="color:${uPnl >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${uPnl >= 0 ? '+' : ''}$${uPnl.toFixed(2)}</td>
               <td style="color:var(--green);font-weight:700">$${b.potentialPayout.toFixed(2)}</td>
-            </tr>
-          `).join('')}
+            </tr>`;
+          }).join('')}
         </table>
       `;
     }

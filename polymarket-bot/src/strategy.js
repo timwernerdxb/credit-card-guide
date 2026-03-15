@@ -1,5 +1,6 @@
 const api = require('./api');
 const config = require('./config');
+const store = require('./store');
 
 // ============================================
 // Trading Strategy Engine
@@ -16,6 +17,7 @@ class Strategy {
     this.tradeLog = [];
     this.pnl = 0;
     this.totalInvested = 0;
+    this.unrealizedPnl = 0;
     this.stats = {
       scans: 0,
       tradesPlaced: 0,
@@ -24,6 +26,51 @@ class Strategy {
       lastScan: null,
       startedAt: new Date().toISOString(),
     };
+  }
+
+  // ---- Restore state from persistent storage ----
+  restore() {
+    const saved = store.getStrategyState();
+    if (!saved || !saved.stats) return;
+
+    if (saved.positions && saved.positions.length > 0) {
+      this.positions = new Map();
+      for (const p of saved.positions) {
+        this.positions.set(p.tokenId, {
+          marketId: p.marketId,
+          question: p.question,
+          side: p.side,
+          size: p.size,
+          avgPrice: p.avgPrice,
+          entryTime: p.entryTime,
+          edge: p.edge,
+          negRisk: p.negRisk,
+        });
+      }
+    }
+
+    this.tradeLog = saved.tradeLog || [];
+    this.pnl = saved.pnl || 0;
+    this.totalInvested = saved.totalInvested || 0;
+    if (saved.stats) {
+      this.stats = { ...this.stats, ...saved.stats };
+    }
+    console.log(`[STRATEGY] Restored: ${this.positions.size} positions, P&L: $${this.pnl.toFixed(2)}, ${this.tradeLog.length} trades in log`);
+  }
+
+  // ---- Persist current state ----
+  persist() {
+    const positionsArray = [];
+    for (const [tokenId, pos] of this.positions.entries()) {
+      positionsArray.push({ tokenId, ...pos });
+    }
+    store.setStrategyState({
+      positions: positionsArray,
+      tradeLog: this.tradeLog,
+      pnl: this.pnl,
+      totalInvested: this.totalInvested,
+      stats: this.stats,
+    });
   }
 
   // ---- Scan markets for opportunities ----
@@ -81,6 +128,8 @@ class Strategy {
       this.stats.errors++;
       console.error('[SCAN] Error:', err.message);
     }
+
+    this.persist();
   }
 
   // ---- Parse market data into usable format ----
@@ -253,6 +302,7 @@ class Strategy {
       if (this.tradeLog.length > 100) this.tradeLog.pop();
       this.stats.tradesPlaced++;
 
+      this.persist();
       console.log(`[TRADE] Order result: ${JSON.stringify(result)}`);
     } catch (err) {
       this.stats.errors++;
@@ -276,6 +326,8 @@ class Strategy {
   async rebalance() {
     console.log(`[REBALANCE] Checking ${this.positions.size} positions...`);
 
+    let totalUnrealized = 0;
+
     for (const [tokenId, pos] of this.positions.entries()) {
       try {
         const midpoint = await api.getMidpoint(tokenId);
@@ -286,6 +338,12 @@ class Strategy {
         const profit = (currentPrice - pos.avgPrice) * pos.size;
         const profitPct = ((currentPrice - pos.avgPrice) / pos.avgPrice) * 100;
 
+        // Track unrealized P&L
+        pos.currentPrice = currentPrice;
+        pos.unrealizedPnl = profit;
+        pos.unrealizedPct = profitPct;
+        totalUnrealized += profit;
+
         console.log(`[REBALANCE] "${pos.question.substring(0, 40)}..." | entry: ${pos.avgPrice.toFixed(3)} | now: ${currentPrice.toFixed(3)} | P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} (${profitPct.toFixed(1)}%)`);
 
         // Take profit at +15% or cut loss at -20%
@@ -294,10 +352,20 @@ class Strategy {
           console.log(`[REBALANCE] ${action}: Selling ${pos.side} position`);
 
           try {
+            // Check actual balance before selling
+            const balance = await api.getBalanceAllowance(tokenId);
+            const actualShares = balance ? parseFloat(balance.balance || 0) / 1e6 : 0;
+            if (actualShares < 0.01) {
+              console.log(`[REBALANCE] No shares held for this position (balance: ${actualShares}), removing from tracking`);
+              this.positions.delete(tokenId);
+              continue;
+            }
+            const sellSize = Math.min(pos.size, actualShares);
+
             await api.placeSellOrder({
               tokenId,
               price: parseFloat(currentPrice.toFixed(2)),
-              size: parseFloat(pos.size.toFixed(2)),
+              size: parseFloat(sellSize.toFixed(2)),
               tickSize: '0.01',
               negRisk: pos.negRisk || false,
             });
@@ -327,6 +395,9 @@ class Strategy {
         console.error(`[REBALANCE] Error checking ${tokenId}: ${err.message}`);
       }
     }
+
+    this.unrealizedPnl = totalUnrealized;
+    this.persist();
   }
 
   // ---- Get current state for dashboard ----
@@ -341,6 +412,7 @@ class Strategy {
       positions: positionsArray,
       tradeLog: this.tradeLog.slice(0, 50),
       pnl: this.pnl,
+      unrealizedPnl: this.unrealizedPnl,
       totalInvested: this.totalInvested,
       config: {
         strategy: config.strategy,

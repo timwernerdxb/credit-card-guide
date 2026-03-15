@@ -223,6 +223,16 @@ class PolymarketAPI {
   async getTrades() {
     return this.client.getTrades();
   }
+
+  // ---- CLOB: Get balances (check if we actually hold shares) ----
+  async getBalanceAllowance(tokenId) {
+    try {
+      return await this.client.getBalanceAllowance({ token_id: tokenId });
+    } catch (err) {
+      console.warn(`[API] Balance check failed: ${err.message}`);
+      return null;
+    }
+  }
 }
 
 module.exports = new PolymarketAPI();

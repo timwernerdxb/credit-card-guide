@@ -87,12 +87,39 @@ class Strategy {
   async syncFromAPI() {
     console.log('[SYNC] Calculating realized P&L from Polymarket trade history...');
 
-    // Clear ALL restored positions — they're unreliable from old syncs.
-    // Bot will only track positions it opens from now on.
+    // Verify each stored position by checking actual on-chain balance.
+    // Keep positions where we actually hold shares, remove phantom ones.
     if (this.positions.size > 0) {
-      console.log(`[SYNC] Clearing ${this.positions.size} stale restored positions`);
-      this.positions.clear();
+      console.log(`[SYNC] Verifying ${this.positions.size} stored positions against actual balances...`);
+      const toRemove = [];
+      for (const [tokenId, pos] of this.positions.entries()) {
+        try {
+          const balance = await api.getBalanceAllowance(tokenId);
+          const actualShares = balance ? parseFloat(balance.balance || 0) / 1e6 : 0;
+          if (actualShares < 0.01) {
+            console.log(`[SYNC] Removing "${(pos.question || '').substring(0, 40)}..." — no shares held`);
+            toRemove.push(tokenId);
+          } else {
+            // Update size to actual balance
+            pos.size = actualShares;
+            console.log(`[SYNC] Verified: "${(pos.question || '').substring(0, 40)}..." — ${actualShares.toFixed(2)} shares`);
+          }
+        } catch (err) {
+          // Balance check failed (invalid token, resolved market, etc.) — remove it
+          console.log(`[SYNC] Removing "${(pos.question || '').substring(0, 40)}..." — balance check failed`);
+          toRemove.push(tokenId);
+        }
+      }
+      for (const id of toRemove) {
+        this.positions.delete(id);
+      }
+      console.log(`[SYNC] Kept ${this.positions.size} verified positions, removed ${toRemove.length}`);
+
+      // Recalculate invested from verified positions
       this.totalInvested = 0;
+      for (const [, pos] of this.positions.entries()) {
+        this.totalInvested += (pos.avgPrice || 0) * (pos.size || 0);
+      }
     }
 
     try {

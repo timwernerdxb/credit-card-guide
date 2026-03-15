@@ -29,6 +29,12 @@ module.exports = {
   btcLotteryMaxPrice: parseFloat(process.env.BTC_LOTTERY_MAX_PRICE || '0.02'), // max 2¢ per share
   btcScanInterval: 5 * 60 * 1000, // check BTC markets every 5 min
 
+  // BTC 5-minute up/down markets
+  btc5mEnabled: process.env.BTC_5M_ENABLED !== 'false', // on by default when BTC enabled
+  btc5mAmount: parseFloat(process.env.BTC_5M_AMOUNT || '3'), // bet size per 5-min window
+  btc5mMaxBetsPerWindow: parseInt(process.env.BTC_5M_MAX_BETS || '1'), // max bets per window
+  btc5mScanInterval: 60 * 1000, // check every 60s to catch each 5-min window
+
   // Server
   port: parseInt(process.env.PORT || '3000'),
 

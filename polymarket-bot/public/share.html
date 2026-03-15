@@ -212,8 +212,13 @@
         <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Momentum Bets</div>
         <div style="font-size:20px;font-weight:700" id="btcMomentumCount">0</div>
       </div>
+      <div>
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">5-Min Bets</div>
+        <div style="font-size:20px;font-weight:700" id="btc5mCount">0</div>
+      </div>
     </div>
   </div>
+  <div id="btc5mTable"></div>
   <div id="btcLotteryTable"></div>
   <div id="btcMomentumTable"></div>
   <div id="btcTradeLog"></div>
@@ -331,6 +336,33 @@
     document.getElementById('btcTotalBet').textContent = `$${(btc.totalBet || 0).toFixed(2)}`;
     document.getElementById('btcLotteryCount').textContent = (btc.lotteryBets || []).length;
     document.getElementById('btcMomentumCount').textContent = (btc.momentumBets || []).length;
+    document.getElementById('btc5mCount').textContent = (btc.fiveMinBets || []).length;
+
+    // 5-min BTC bets
+    const fiveMin = btc.fiveMinBets || [];
+    if (fiveMin.length === 0) {
+      document.getElementById('btc5mTable').innerHTML = '<div class="empty">No 5-minute BTC bets yet</div>';
+    } else {
+      document.getElementById('btc5mTable').innerHTML = `
+        <div style="padding:0 16px 8px;font-size:12px;font-weight:600;color:var(--green)">5-MINUTE BTC BETS</div>
+        <table>
+          <tr><th>Window</th><th>Direction</th><th>Entry</th><th>Now</th><th>Bet</th><th>P&L</th><th>Confidence</th></tr>
+          ${fiveMin.map(b => {
+            const uPnl = b.unrealizedPnl || 0;
+            return `
+            <tr>
+              <td style="white-space:nowrap">${esc(b.question)}</td>
+              <td><span class="badge badge-${b.direction === 'up' ? 'yes' : 'no'}">${b.direction.toUpperCase()}</span></td>
+              <td>${(b.price * 100).toFixed(1)}\u00a2</td>
+              <td>${b.currentPrice ? (b.currentPrice * 100).toFixed(1) + '\u00a2' : '--'}</td>
+              <td>$${b.amount.toFixed(2)}</td>
+              <td style="color:${uPnl >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${uPnl >= 0 ? '+' : ''}$${uPnl.toFixed(2)}</td>
+              <td style="color:var(--dim)">${b.confidence ? (b.confidence * 100).toFixed(0) + '%' : '--'}</td>
+            </tr>`;
+          }).join('')}
+        </table>
+      `;
+    }
 
     if (btc.sentiment !== null && btc.sentiment !== undefined) {
       const s = (btc.sentiment * 100).toFixed(0);
@@ -397,7 +429,7 @@
           ${btcTrades.map(t => `
             <tr>
               <td style="color:var(--muted);white-space:nowrap">${new Date(t.time).toLocaleTimeString()}</td>
-              <td><span style="color:${t.type === 'LOTTERY' ? 'var(--yellow)' : 'var(--blue)'};font-weight:600;font-size:11px">${t.type}</span></td>
+              <td><span style="color:${t.type === 'LOTTERY' ? 'var(--yellow)' : t.type === '5M-BTC' ? 'var(--green)' : 'var(--blue)'};font-weight:600;font-size:11px">${t.type}</span></td>
               <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.question)}</td>
               <td><span class="badge badge-${(t.side||'').includes('yes') ? 'yes' : 'no'}">${(t.side||'').toUpperCase()}</span></td>
               <td>${(parseFloat(t.price) * 100).toFixed(1)}\u00a2</td>

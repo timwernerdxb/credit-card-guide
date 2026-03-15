@@ -1,6 +1,7 @@
 const api = require('./api');
 const config = require('./config');
 const store = require('./store');
+const fetch = require('node-fetch');
 
 // ============================================
 // BTC-Specific Trading Strategy
@@ -31,6 +32,9 @@ class BTCStrategy {
       lastScan: null,
     };
     this.priceHistory = []; // track BTC price for momentum
+    this.fiveMinBets = []; // 5-minute up/down bets
+    this.lastWindowTs = 0; // last 5-min window we bet on
+    this.fiveMinHistory = []; // track 5-min outcomes for learning
   }
 
   // ---- Restore state from persistent storage ----
@@ -44,10 +48,13 @@ class BTCStrategy {
     this.pnl = saved.pnl || 0;
     this.totalBet = saved.totalBet || 0;
     this.priceHistory = saved.priceHistory || [];
+    this.fiveMinBets = saved.fiveMinBets || [];
+    this.lastWindowTs = saved.lastWindowTs || 0;
+    this.fiveMinHistory = saved.fiveMinHistory || [];
     if (saved.stats) {
       this.stats = { ...this.stats, ...saved.stats };
     }
-    console.log(`[BTC] Restored: ${this.lotteryBets.length} lottery, ${this.momentumBets.length} momentum, P&L: $${this.pnl.toFixed(2)}`);
+    console.log(`[BTC] Restored: ${this.lotteryBets.length} lottery, ${this.momentumBets.length} momentum, ${this.fiveMinBets.length} 5m bets, P&L: $${this.pnl.toFixed(2)}`);
   }
 
   // ---- Persist current state ----
@@ -60,6 +67,9 @@ class BTCStrategy {
       totalBet: this.totalBet,
       stats: this.stats,
       priceHistory: this.priceHistory,
+      fiveMinBets: this.fiveMinBets,
+      lastWindowTs: this.lastWindowTs,
+      fiveMinHistory: this.fiveMinHistory,
     });
   }
 
@@ -586,8 +596,366 @@ class BTCStrategy {
       }
     }
 
+    // Check 5-min bet outcomes
+    await this._trackResolved5mOutcomes();
+
+    // Track unrealized on active 5-min bets
+    for (const bet of this.fiveMinBets) {
+      if (bet.resolved) continue;
+      try {
+        const midpoint = await api.getMidpoint(bet.tokenId);
+        const currentPrice = parseFloat(midpoint.mid || midpoint || 0);
+        if (currentPrice <= 0) continue;
+        const profit = (currentPrice - bet.price) * bet.shares;
+        bet.currentPrice = currentPrice;
+        bet.unrealizedPnl = profit;
+        totalUnrealized += profit;
+      } catch { /* skip */ }
+    }
+
     this.unrealizedPnl = totalUnrealized;
     this.persist();
+  }
+
+  // ============================================
+  // 5-MINUTE BTC UP/DOWN MARKET STRATEGY
+  //
+  // Polymarket has 5-min BTC prediction markets:
+  //   "Will Bitcoin go up in the next 5 minutes?"
+  // New market every 5 minutes at timestamp divisible by 300.
+  //
+  // Discovery: slug = btc-updown-5m-{windowTs}
+  // API: gamma-api.polymarket.com/events?slug=btc-updown-5m-{windowTs}
+  //
+  // Strategy: Use recent 5-min outcomes + momentum sentiment
+  // to predict Up vs Down in the next window.
+  // ============================================
+
+  // ---- Get current and next 5-min window timestamps ----
+  _get5mWindows() {
+    const now = Math.floor(Date.now() / 1000);
+    const currentWindow = Math.floor(now / 300) * 300;
+    const nextWindow = currentWindow + 300;
+    const secsLeft = nextWindow - now;
+    return { currentWindow, nextWindow, secsLeft };
+  }
+
+  // ---- Fetch 5-min market from Gamma API ----
+  async _fetch5mMarket(windowTs) {
+    const slug = `btc-updown-5m-${windowTs}`;
+    const url = `${config.gammaBaseUrl}/events?slug=${slug}`;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+
+      const events = await res.json();
+      if (!events || events.length === 0) return null;
+
+      const event = events[0];
+      if (!event.markets || event.markets.length === 0) return null;
+
+      const market = event.markets[0];
+      if (!market.clobTokenIds || market.closed) return null;
+
+      const tokenIds = typeof market.clobTokenIds === 'string'
+        ? JSON.parse(market.clobTokenIds) : market.clobTokenIds;
+      const prices = typeof market.outcomePrices === 'string'
+        ? JSON.parse(market.outcomePrices) : market.outcomePrices;
+
+      if (!tokenIds || tokenIds.length < 2 || !prices || prices.length < 2) return null;
+
+      return {
+        slug,
+        windowTs,
+        question: market.question || `BTC 5m ${new Date(windowTs * 1000).toLocaleTimeString()}`,
+        upTokenId: tokenIds[0],    // Yes = Up
+        downTokenId: tokenIds[1],  // No = Down
+        upPrice: parseFloat(prices[0]),
+        downPrice: parseFloat(prices[1]),
+        conditionId: market.conditionId,
+        negRisk: market.negRisk || false,
+      };
+    } catch (err) {
+      console.error(`[BTC 5M] Error fetching market ${slug}:`, err.message);
+      return null;
+    }
+  }
+
+  // ---- Analyze momentum to decide Up vs Down ----
+  _analyze5mSignal(market) {
+    // Collect signals from multiple sources
+    let upScore = 0;
+    let downScore = 0;
+
+    // Signal 1: Market price itself (crowd wisdom)
+    // If Up is trading > 50¢, crowd expects Up
+    if (market.upPrice > 0.55) {
+      upScore += 1;
+    } else if (market.downPrice > 0.55) {
+      downScore += 1;
+    }
+
+    // Signal 2: Recent 5-min outcomes (streak detection)
+    const recentOutcomes = this.fiveMinHistory.slice(-6); // last 30 min
+    if (recentOutcomes.length >= 2) {
+      const lastTwo = recentOutcomes.slice(-2);
+      const streak = lastTwo.every(o => o.result === 'up') ? 'up'
+        : lastTwo.every(o => o.result === 'down') ? 'down' : null;
+
+      if (streak === 'up') {
+        // Momentum: if 2+ up in a row, lean up (trend continuation)
+        upScore += 1.5;
+      } else if (streak === 'down') {
+        downScore += 1.5;
+      }
+
+      // Mean reversion after 3+ streak
+      const lastThree = recentOutcomes.slice(-3);
+      if (lastThree.length === 3 && lastThree.every(o => o.result === 'up')) {
+        // Long streak — add some mean reversion (reduce up bias)
+        downScore += 0.5;
+      } else if (lastThree.length === 3 && lastThree.every(o => o.result === 'down')) {
+        upScore += 0.5;
+      }
+    }
+
+    // Signal 3: Momentum from general BTC markets sentiment
+    if (this.priceHistory.length >= 2) {
+      const latest = this.priceHistory[this.priceHistory.length - 1];
+      const prev = this.priceHistory[this.priceHistory.length - 2];
+      const sentimentChange = latest.sentiment - prev.sentiment;
+
+      if (sentimentChange > 0.02) {
+        upScore += 1; // growing bullish sentiment
+      } else if (sentimentChange < -0.02) {
+        downScore += 1; // growing bearish sentiment
+      }
+    }
+
+    // Signal 4: Look for value (bet the cheaper side when signals are neutral)
+    if (Math.abs(upScore - downScore) < 0.5) {
+      // Neutral — buy the cheaper side for better odds
+      if (market.upPrice < market.downPrice) {
+        upScore += 0.3;
+      } else {
+        downScore += 0.3;
+      }
+    }
+
+    const totalScore = upScore + downScore;
+    const confidence = totalScore > 0 ? Math.abs(upScore - downScore) / totalScore : 0;
+
+    const direction = upScore >= downScore ? 'up' : 'down';
+
+    return {
+      direction,
+      confidence,
+      upScore,
+      downScore,
+      reasoning: `Up: ${upScore.toFixed(1)}, Down: ${downScore.toFixed(1)}, Confidence: ${(confidence * 100).toFixed(0)}%`,
+    };
+  }
+
+  // ---- Scan and trade 5-minute markets ----
+  async scan5m() {
+    if (!config.btcEnabled || !config.btc5mEnabled) return;
+
+    const { currentWindow, nextWindow, secsLeft } = this._get5mWindows();
+
+    // Only bet if we haven't already bet on this window AND
+    // there's enough time left (at least 60s) to get the order in
+    if (this.lastWindowTs >= currentWindow) {
+      return; // already bet on this window
+    }
+
+    // Try current window first (if still open), then next if current is about to end
+    let targetTs = currentWindow;
+    if (secsLeft < 60) {
+      // Current window closing soon, try next window
+      targetTs = nextWindow;
+      if (this.lastWindowTs >= nextWindow) return;
+    }
+
+    console.log(`[BTC 5M] Scanning window ${new Date(targetTs * 1000).toLocaleTimeString()} (${secsLeft}s left in current)...`);
+
+    const market = await this._fetch5mMarket(targetTs);
+    if (!market) {
+      // Try next window if current isn't available yet
+      if (targetTs === currentWindow) {
+        const nextMarket = await this._fetch5mMarket(nextWindow);
+        if (nextMarket && this.lastWindowTs < nextWindow) {
+          await this._trade5m(nextMarket);
+        } else {
+          console.log('[BTC 5M] No 5-min market found for current or next window');
+        }
+      }
+      return;
+    }
+
+    await this._trade5m(market);
+  }
+
+  // ---- Place a bet on a 5-minute market ----
+  async _trade5m(market) {
+    const signal = this._analyze5mSignal(market);
+
+    console.log(`[BTC 5M] "${market.question}" | Up: ${(market.upPrice * 100).toFixed(1)}¢ Down: ${(market.downPrice * 100).toFixed(1)}¢`);
+    console.log(`[BTC 5M] Signal: ${signal.direction.toUpperCase()} | ${signal.reasoning}`);
+
+    // Only bet if we have some confidence
+    if (signal.confidence < 0.1) {
+      console.log('[BTC 5M] Low confidence, skipping this window');
+      this.lastWindowTs = market.windowTs;
+      return;
+    }
+
+    const betAmount = config.btc5mAmount;
+    const isUp = signal.direction === 'up';
+    const tokenId = isUp ? market.upTokenId : market.downTokenId;
+    const price = isUp ? market.upPrice : market.downPrice;
+
+    // Don't buy at extreme prices
+    if (price > 0.85 || price < 0.05) {
+      console.log(`[BTC 5M] Price ${(price * 100).toFixed(1)}¢ too extreme, skipping`);
+      this.lastWindowTs = market.windowTs;
+      return;
+    }
+
+    const shares = betAmount / price;
+    const potentialPayout = shares; // $1 per share if correct
+
+    console.log(`[BTC 5M] Betting $${betAmount} on ${signal.direction.toUpperCase()} @ ${(price * 100).toFixed(1)}¢ → potential $${potentialPayout.toFixed(2)}`);
+
+    try {
+      await api.placeBuyOrder({
+        tokenId,
+        price: parseFloat(price.toFixed(2)),
+        size: parseFloat(shares.toFixed(2)),
+        tickSize: '0.01',
+        negRisk: market.negRisk,
+      });
+
+      this.lastWindowTs = market.windowTs;
+
+      this.fiveMinBets.push({
+        windowTs: market.windowTs,
+        tokenId,
+        question: market.question,
+        direction: signal.direction,
+        price,
+        shares,
+        amount: betAmount,
+        potentialPayout,
+        confidence: signal.confidence,
+        reasoning: signal.reasoning,
+        time: new Date().toISOString(),
+      });
+
+      this.totalBet += betAmount;
+      this.stats.lotteryBetsPlaced++; // count 5m bets in lottery stats
+
+      this.tradeLog.unshift({
+        time: new Date().toISOString(),
+        type: '5M-BTC',
+        question: market.question.substring(0, 80),
+        side: signal.direction,
+        price,
+        shares: shares.toFixed(2),
+        amount: betAmount,
+        potentialPayout: `$${potentialPayout.toFixed(2)}`,
+        confidence: `${(signal.confidence * 100).toFixed(0)}%`,
+        status: 'placed',
+      });
+
+      // Keep trade log manageable
+      if (this.tradeLog.length > 100) this.tradeLog.length = 100;
+
+      this.persist();
+      console.log(`[BTC 5M] Order placed! ${shares.toFixed(2)} shares`);
+    } catch (err) {
+      this.stats.errors++;
+      console.error(`[BTC 5M] Order failed: ${err.message}`);
+
+      this.tradeLog.unshift({
+        time: new Date().toISOString(),
+        type: '5M-BTC',
+        question: market.question.substring(0, 80),
+        side: signal.direction,
+        price,
+        amount: betAmount,
+        status: 'error',
+        error: err.message,
+      });
+    }
+  }
+
+  // ---- Track resolved 5-min market outcomes for learning ----
+  async _trackResolved5mOutcomes() {
+    // Check recent 5-min bets to see if their markets resolved
+    for (let i = this.fiveMinBets.length - 1; i >= 0; i--) {
+      const bet = this.fiveMinBets[i];
+
+      // Skip if already resolved or too recent (< 6 min old)
+      if (bet.resolved) continue;
+      const ageMs = Date.now() - new Date(bet.time).getTime();
+      if (ageMs < 6 * 60 * 1000) continue;
+
+      try {
+        const midpoint = await api.getMidpoint(bet.tokenId);
+        const currentPrice = parseFloat(midpoint.mid || midpoint || 0);
+
+        // 5-min markets resolve to ~1.0 (won) or ~0.0 (lost)
+        if (currentPrice > 0.90) {
+          // Won!
+          const pnl = (1.0 - bet.price) * bet.shares;
+          bet.resolved = true;
+          bet.won = true;
+          bet.pnl = pnl;
+          this.pnl += pnl;
+
+          this.fiveMinHistory.push({
+            windowTs: bet.windowTs,
+            direction: bet.direction,
+            result: bet.direction, // our bet direction was correct
+            time: bet.time,
+          });
+
+          console.log(`[BTC 5M] WON! ${bet.direction.toUpperCase()} bet → +$${pnl.toFixed(2)}`);
+        } else if (currentPrice < 0.10) {
+          // Lost
+          const pnl = -bet.amount;
+          bet.resolved = true;
+          bet.won = false;
+          bet.pnl = pnl;
+          this.pnl += pnl;
+
+          // Record the actual result (opposite of our bet)
+          this.fiveMinHistory.push({
+            windowTs: bet.windowTs,
+            direction: bet.direction,
+            result: bet.direction === 'up' ? 'down' : 'up',
+            time: bet.time,
+          });
+
+          console.log(`[BTC 5M] LOST. ${bet.direction.toUpperCase()} bet → -$${bet.amount.toFixed(2)}`);
+        }
+        // else: not resolved yet, check next time
+      } catch {
+        // skip, check next rebalance
+      }
+    }
+
+    // Keep only last 50 history entries for learning
+    if (this.fiveMinHistory.length > 50) {
+      this.fiveMinHistory = this.fiveMinHistory.slice(-50);
+    }
+
+    // Remove resolved bets older than 1 hour
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    this.fiveMinBets = this.fiveMinBets.filter(b =>
+      !b.resolved || new Date(b.time).getTime() > oneHourAgo
+    );
   }
 
   // ---- Get state for dashboard ----
@@ -596,7 +964,9 @@ class BTCStrategy {
       stats: this.stats,
       lotteryBets: this.lotteryBets,
       momentumBets: this.momentumBets,
-      tradeLog: this.tradeLog.slice(0, 30),
+      fiveMinBets: this.fiveMinBets.filter(b => !b.resolved),
+      fiveMinHistory: this.fiveMinHistory.slice(-12),
+      tradeLog: this.tradeLog.slice(0, 50),
       pnl: this.pnl,
       unrealizedPnl: this.unrealizedPnl,
       totalBet: this.totalBet,

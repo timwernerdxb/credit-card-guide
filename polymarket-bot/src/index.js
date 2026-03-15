@@ -98,11 +98,13 @@ app.get('/admin', (req, res) => {
 let scanTimer = null;
 let rebalanceTimer = null;
 let btcTimer = null;
+let btc5mTimer = null;
 
 function startTimers() {
   if (scanTimer) clearInterval(scanTimer);
   if (rebalanceTimer) clearInterval(rebalanceTimer);
   if (btcTimer) clearInterval(btcTimer);
+  if (btc5mTimer) clearInterval(btc5mTimer);
 
   scanTimer = setInterval(() => strategy.scan(), config.scanInterval);
   rebalanceTimer = setInterval(() => {
@@ -110,12 +112,18 @@ function startTimers() {
     btcStrategy.rebalance();
   }, config.rebalanceInterval);
   btcTimer = setInterval(() => btcStrategy.scan(), config.btcScanInterval);
+
+  // 5-min BTC markets — scan every 60s to catch each 5-min window
+  if (config.btc5mEnabled) {
+    btc5mTimer = setInterval(() => btcStrategy.scan5m(), config.btc5mScanInterval);
+  }
 }
 
 function stopTimers() {
   if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
   if (rebalanceTimer) { clearInterval(rebalanceTimer); rebalanceTimer = null; }
   if (btcTimer) { clearInterval(btcTimer); btcTimer = null; }
+  if (btc5mTimer) { clearInterval(btc5mTimer); btc5mTimer = null; }
 }
 
 app.listen(config.port, async () => {
@@ -132,6 +140,8 @@ app.listen(config.port, async () => {
   console.log(`  BTC enabled: ${config.btcEnabled}`);
   console.log(`  BTC lottery: $${config.btcLotteryAmount}/bet (max ${config.btcMaxLotteryBets} bets)`);
   console.log(`  BTC momentum: $${config.btcMomentumAmount}/trade`);
+  console.log(`  BTC 5m enabled: ${config.btc5mEnabled}`);
+  console.log(`  BTC 5m amount: $${config.btc5mAmount}/window`);
   console.log('='.repeat(50));
 
   if (!config.privateKey) {
@@ -155,10 +165,13 @@ app.listen(config.port, async () => {
     // Initial scans
     await strategy.scan();
     await btcStrategy.scan();
+    if (config.btc5mEnabled) {
+      await btcStrategy.scan5m();
+    }
 
     // Start recurring timers
     startTimers();
-    console.log('[BOOT] All trading loops started (general + BTC)');
+    console.log('[BOOT] All trading loops started (general + BTC + 5m)');
   } catch (err) {
     console.error('[BOOT] Failed to initialize:', err.message);
     console.error('[BOOT] Check your PRIVATE_KEY and FUNDER_ADDRESS env vars');

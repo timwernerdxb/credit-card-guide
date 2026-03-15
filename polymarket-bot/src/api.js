@@ -78,23 +78,23 @@ class PolymarketAPI {
     const agent = getProxyAgent();
     if (!agent) return;
 
-    // The CLOB client uses axios internally. We patch axios defaults
-    // to route through the proxy.
     try {
       const axios = require('axios');
-      const { HttpsProxyAgent } = config.proxyUrl.startsWith('socks')
-        ? { HttpsProxyAgent: require('socks-proxy-agent').SocksProxyAgent }
-        : require('https-proxy-agent');
-
+      const { HttpsProxyAgent } = require('https-proxy-agent');
       const proxyAgentInstance = new HttpsProxyAgent(config.proxyUrl);
-      axios.defaults.httpsAgent = proxyAgentInstance;
-      axios.defaults.httpAgent = proxyAgentInstance;
-      axios.defaults.proxy = false; // Disable axios built-in proxy, use agent instead
 
-      console.log('[PROXY] Axios patched to use proxy for CLOB client');
+      // Intercept all axios requests to inject the proxy agent
+      // (avoids circular JSON issues with setting defaults directly)
+      axios.interceptors.request.use((reqConfig) => {
+        reqConfig.httpsAgent = proxyAgentInstance;
+        reqConfig.httpAgent = proxyAgentInstance;
+        reqConfig.proxy = false;
+        return reqConfig;
+      });
+
+      console.log('[PROXY] Axios interceptor set for proxy');
     } catch (err) {
       console.warn('[PROXY] Could not patch axios:', err.message);
-      console.warn('[PROXY] CLOB API calls may not go through proxy');
     }
   }
 

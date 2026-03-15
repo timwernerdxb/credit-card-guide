@@ -259,7 +259,45 @@ class BTCStrategy {
   // When most markets lean bullish → buy YES on
   // "BTC above X" markets at reasonable prices.
   // When bearish → buy NO.
+  //
+  // BTC_MOMENTUM_AMOUNT is the MAX. Actual size is
+  // scaled by trend strength, liquidity, and price:
+  //   Weak trend   → 30-50% of max
+  //   Medium trend → 50-75% of max
+  //   Strong trend → 75-100% of max
+  // Higher liquidity and mid-range prices get a boost.
+  // Minimum bet is always $1.
   // ============================================
+
+  calculateMomentumBetSize(trendStrength, price, liquidity, maxBet) {
+    // trendStrength: absolute value of sentiment change (0.03 = weak, 0.10+ = strong)
+    let ratio;
+
+    if (trendStrength < 0.05) {
+      ratio = 0.30 + (trendStrength / 0.05) * 0.20; // 30-50%
+    } else if (trendStrength < 0.08) {
+      ratio = 0.50 + ((trendStrength - 0.05) / 0.03) * 0.25; // 50-75%
+    } else {
+      ratio = 0.75 + Math.min(0.25, (trendStrength - 0.08) / 0.05 * 0.25); // 75-100%
+    }
+
+    // Price sweet spot: best value in 0.25-0.45 range
+    if (price >= 0.25 && price <= 0.45) {
+      ratio = Math.min(1.0, ratio * 1.15); // 15% boost
+    } else if (price < 0.20 || price > 0.55) {
+      ratio *= 0.8; // reduce for extreme prices
+    }
+
+    // Liquidity boost
+    if (liquidity > 100000) {
+      ratio = Math.min(1.0, ratio * 1.1);
+    } else if (liquidity < 10000) {
+      ratio *= 0.7;
+    }
+
+    const amount = Math.max(1.0, Math.min(maxBet, maxBet * ratio));
+    return parseFloat(amount.toFixed(2));
+  }
 
   updatePriceSentiment(btcMarkets) {
     // Extract implied BTC direction from market prices
@@ -327,9 +365,9 @@ class BTCStrategy {
     }
 
     const direction = isBullish ? 'bullish' : 'bearish';
-    console.log(`[BTC MOMENTUM] Detected ${direction} trend, looking for trades...`);
-
-    const betAmount = config.btcMomentumAmount;
+    const trendStrength = Math.abs(trend);
+    const maxBet = config.btcMomentumAmount;
+    console.log(`[BTC MOMENTUM] Detected ${direction} trend (strength: ${(trendStrength * 100).toFixed(1)}%), looking for trades...`);
 
     for (const market of btcMarkets) {
       const parsed = this.parseMarket(market);
@@ -370,9 +408,10 @@ class BTCStrategy {
 
       if (!side) continue;
 
+      const betAmount = this.calculateMomentumBetSize(trendStrength, price, parsed.liquidity, maxBet);
       const shares = betAmount / price;
 
-      console.log(`[BTC MOMENTUM] ${direction.toUpperCase()} → ${side.toUpperCase()} on "${parsed.question.substring(0, 60)}..." @ ${(price * 100).toFixed(1)}¢ | $${betAmount}`);
+      console.log(`[BTC MOMENTUM] ${direction.toUpperCase()} → ${side.toUpperCase()} on "${parsed.question.substring(0, 60)}..." @ ${(price * 100).toFixed(1)}¢ | $${betAmount} (max $${maxBet})`);
 
       try {
         await api.placeBuyOrder({

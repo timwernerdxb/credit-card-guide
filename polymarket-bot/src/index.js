@@ -159,12 +159,8 @@ app.listen(config.port, async () => {
     await api.init();
     console.log('[BOOT] Authenticated with Polymarket CLOB API');
 
-    // Sync from Polymarket API to reconstruct P&L and find missing positions
+    // Sync: verify positions + calculate P&L
     await strategy.syncFromAPI();
-
-    // Calculate unrealized P&L immediately after sync
-    await strategy.rebalance();
-    await btcStrategy.rebalance();
 
     // Initial scans
     await strategy.scan();
@@ -172,6 +168,11 @@ app.listen(config.port, async () => {
     if (config.btc5mEnabled) {
       await btcStrategy.scan5m();
     }
+
+    // Calculate unrealized P&L AFTER scan so all positions get priced
+    await strategy.rebalance();
+    await btcStrategy.rebalance();
+    console.log('[BOOT] Unrealized P&L calculated for all positions');
 
     // Start recurring timers
     startTimers();

@@ -109,9 +109,23 @@ class Strategy {
         return;
       }
 
-      // Debug: log first trade to understand field names
+      // Debug: log first few trades to understand field values
       console.log(`[SYNC] Found ${trades.length} trades. Sample trade fields: ${JSON.stringify(Object.keys(trades[0]))}`);
       console.log(`[SYNC] Sample trade: ${JSON.stringify(trades[0]).substring(0, 300)}`);
+
+      // Log unique side/trader_side values and statuses to debug
+      const sideValues = new Set();
+      const traderSideValues = new Set();
+      const statusValues = new Set();
+      for (const t of trades.slice(0, 20)) {
+        sideValues.add(t.side);
+        traderSideValues.add(t.trader_side);
+        statusValues.add(t.status);
+      }
+      console.log(`[SYNC] DEBUG: side values: ${JSON.stringify([...sideValues])}`);
+      console.log(`[SYNC] DEBUG: trader_side values: ${JSON.stringify([...traderSideValues])}`);
+      console.log(`[SYNC] DEBUG: status values: ${JSON.stringify([...statusValues])}`);
+      console.log(`[SYNC] DEBUG: sample sizes: ${trades.slice(0, 5).map(t => t.size).join(', ')}`);
 
       // Build net position per tokenId from trade history
       // CLOB client trades may use different field names:
@@ -121,7 +135,18 @@ class Strategy {
 
       for (const trade of trades) {
         const tokenId = trade.asset_id || trade.tokenId || trade.token_id || trade.assetId;
-        const rawSide = (trade.trader_side || trade.side || '').toUpperCase();
+        // trader_side = this user's perspective, side = order side
+        // Could be "BUY"/"SELL", "buy"/"sell", "TAKER"/"MAKER", "0"/"1", etc.
+        const rawSideStr = String(trade.trader_side || trade.side || '').toUpperCase().trim();
+        // Map various possible values to BUY/SELL
+        let rawSide;
+        if (rawSideStr === 'BUY' || rawSideStr === 'B' || rawSideStr === '0') {
+          rawSide = 'BUY';
+        } else if (rawSideStr === 'SELL' || rawSideStr === 'S' || rawSideStr === '1') {
+          rawSide = 'SELL';
+        } else {
+          rawSide = rawSideStr; // fallback
+        }
         const size = parseFloat(trade.size || trade.amount || 0);
         const price = parseFloat(trade.price || 0);
         const status = (trade.status || '').toUpperCase();
@@ -194,11 +219,22 @@ class Strategy {
         }
       }
 
-      // Always update P&L and invested from API truth
-      this.pnl = syncedPnl;
-      this.totalInvested = syncedInvested;
+      // Update P&L: use the HIGHER of stored vs synced
+      // (stored P&L tracks sells the bot made; synced P&L reconstructs from API)
+      // Never overwrite real P&L with $0 from a sync that missed sell trades
+      if (syncedPnl !== 0) {
+        if (Math.abs(syncedPnl) > Math.abs(this.pnl)) {
+          console.log(`[SYNC] Updating P&L from API: $${this.pnl.toFixed(2)} → $${syncedPnl.toFixed(2)}`);
+          this.pnl = syncedPnl;
+        } else {
+          console.log(`[SYNC] Keeping stored P&L ($${this.pnl.toFixed(2)}) over synced ($${syncedPnl.toFixed(2)})`);
+        }
+      } else {
+        console.log(`[SYNC] API returned no sell data, keeping stored P&L: $${this.pnl.toFixed(2)}`);
+      }
+      this.totalInvested = syncedInvested > 0 ? syncedInvested : this.totalInvested;
 
-      console.log(`[SYNC] Result: ${syncedCount} new positions, realized P&L: $${syncedPnl.toFixed(2)}, invested: $${syncedInvested.toFixed(2)}`);
+      console.log(`[SYNC] Result: ${syncedCount} new positions, P&L: $${this.pnl.toFixed(2)}, invested: $${this.totalInvested.toFixed(2)}`);
 
       // Try to enrich positions with market names from Gamma API
       await this._enrichPositionNames();

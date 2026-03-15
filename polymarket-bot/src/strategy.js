@@ -432,9 +432,18 @@ class Strategy {
 
     let totalUnrealized = 0;
 
+    const toRemove = [];
+
     for (const [tokenId, pos] of this.positions.entries()) {
       try {
-        const midpoint = await api.getMidpoint(tokenId);
+        let midpoint;
+        try {
+          midpoint = await api.getMidpoint(tokenId);
+        } catch (err) {
+          console.log(`[REBALANCE] Can't get price for "${(pos.question || '').substring(0, 40)}..." — removing (${err.message})`);
+          toRemove.push(tokenId);
+          continue;
+        }
         const currentPrice = parseFloat(midpoint.mid || midpoint || 0);
 
         if (currentPrice <= 0) continue;
@@ -498,6 +507,14 @@ class Strategy {
       } catch (err) {
         console.error(`[REBALANCE] Error checking ${tokenId}: ${err.message}`);
       }
+    }
+
+    // Remove invalid/resolved positions
+    for (const id of toRemove) {
+      this.positions.delete(id);
+    }
+    if (toRemove.length > 0) {
+      console.log(`[REBALANCE] Removed ${toRemove.length} invalid positions`);
     }
 
     this.unrealizedPnl = totalUnrealized;

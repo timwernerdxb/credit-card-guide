@@ -149,6 +149,11 @@ app.listen(config.port, async () => {
     await api.init();
     console.log('[BOOT] Authenticated with Polymarket CLOB API');
 
+    // Sync positions from Polymarket if we have no stored state
+    if (strategy.positions.size === 0) {
+      await strategy.syncFromAPI();
+    }
+
     // Initial scans
     await strategy.scan();
     await btcStrategy.scan();

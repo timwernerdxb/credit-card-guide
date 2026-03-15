@@ -73,6 +73,128 @@ class Strategy {
     });
   }
 
+  // ---- Sync positions from Polymarket API (reconstructs after redeploy) ----
+  async syncFromAPI() {
+    console.log('[SYNC] Syncing positions from Polymarket API...');
+    try {
+      // Get trade history from CLOB
+      const trades = await api.getTrades();
+      if (!trades || !Array.isArray(trades) || trades.length === 0) {
+        console.log('[SYNC] No trades found on Polymarket');
+        return;
+      }
+
+      console.log(`[SYNC] Found ${trades.length} trades on Polymarket`);
+
+      // Build net position per tokenId from trade history
+      // Each trade has: asset_id (tokenId), side (BUY/SELL), size, price
+      const netPositions = new Map();
+      let realizedPnl = 0;
+
+      for (const trade of trades) {
+        const tokenId = trade.asset_id;
+        const side = (trade.side || '').toUpperCase();
+        const size = parseFloat(trade.size || 0);
+        const price = parseFloat(trade.price || 0);
+        if (!tokenId || size <= 0 || price <= 0) continue;
+
+        if (!netPositions.has(tokenId)) {
+          netPositions.set(tokenId, { bought: 0, sold: 0, totalCost: 0, totalRevenue: 0, lastPrice: price, market: trade.market || '' });
+        }
+
+        const pos = netPositions.get(tokenId);
+        if (side === 'BUY') {
+          pos.bought += size;
+          pos.totalCost += size * price;
+        } else if (side === 'SELL') {
+          pos.sold += size;
+          pos.totalRevenue += size * price;
+        }
+        pos.lastPrice = price;
+      }
+
+      // Calculate net holdings and P&L
+      let syncedCount = 0;
+      let syncedPnl = 0;
+
+      for (const [tokenId, pos] of netPositions.entries()) {
+        const netShares = pos.bought - pos.sold;
+        const avgBuyPrice = pos.bought > 0 ? pos.totalCost / pos.bought : 0;
+
+        // Realized P&L from closed portions
+        if (pos.sold > 0) {
+          const avgSellPrice = pos.totalRevenue / pos.sold;
+          syncedPnl += (avgSellPrice - avgBuyPrice) * pos.sold;
+        }
+
+        // Still holding shares? Add as position
+        if (netShares > 0.01 && avgBuyPrice > 0) {
+          // Only add if we don't already track this position
+          if (!this.positions.has(tokenId)) {
+            const invested = avgBuyPrice * netShares;
+            this.positions.set(tokenId, {
+              marketId: pos.market,
+              question: pos.market || `Token ${tokenId.substring(0, 12)}...`,
+              side: 'buy',
+              size: netShares,
+              avgPrice: avgBuyPrice,
+              entryTime: new Date().toISOString(),
+              edge: 0,
+              negRisk: false,
+              synced: true,
+            });
+            this.totalInvested += invested;
+            syncedCount++;
+            console.log(`[SYNC] Restored position: ${netShares.toFixed(2)} shares @ ${avgBuyPrice.toFixed(3)} (token: ${tokenId.substring(0, 16)}...)`);
+          }
+        }
+      }
+
+      // Update realized P&L if we had none stored
+      if (this.pnl === 0 && syncedPnl !== 0) {
+        this.pnl = syncedPnl;
+      }
+
+      console.log(`[SYNC] Synced ${syncedCount} positions, realized P&L from history: $${syncedPnl.toFixed(2)}`);
+
+      // Try to enrich positions with market names from Gamma API
+      await this._enrichPositionNames();
+
+      this.persist();
+    } catch (err) {
+      console.error('[SYNC] Error syncing from API:', err.message);
+    }
+  }
+
+  // ---- Fetch market names for synced positions ----
+  async _enrichPositionNames() {
+    try {
+      const markets = await api.getMarkets({ limit: 100 });
+      const tokenToMarket = new Map();
+
+      for (const market of markets) {
+        if (!market.clobTokenIds) continue;
+        const tokenIds = typeof market.clobTokenIds === 'string'
+          ? JSON.parse(market.clobTokenIds) : market.clobTokenIds;
+        for (const tid of tokenIds) {
+          tokenToMarket.set(tid, { question: market.question, id: market.id, negRisk: market.negRisk || false });
+        }
+      }
+
+      for (const [tokenId, pos] of this.positions.entries()) {
+        if (pos.synced && tokenToMarket.has(tokenId)) {
+          const info = tokenToMarket.get(tokenId);
+          pos.question = info.question;
+          pos.marketId = info.id;
+          pos.negRisk = info.negRisk;
+          console.log(`[SYNC] Matched: "${info.question.substring(0, 50)}..."`);
+        }
+      }
+    } catch (err) {
+      console.warn('[SYNC] Could not enrich market names:', err.message);
+    }
+  }
+
   // ---- Scan markets for opportunities ----
   async scan() {
     this.stats.scans++;

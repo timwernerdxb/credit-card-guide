@@ -52,14 +52,7 @@ class Strategy {
     }
 
     this.tradeLog = saved.tradeLog || [];
-    // Reset P&L if it's from the old broken sync (> $1000 is clearly wrong for $10 trades)
-    const savedPnl = saved.pnl || 0;
-    if (Math.abs(savedPnl) > 1000) {
-      console.log(`[STRATEGY] Resetting inflated P&L ($${savedPnl.toFixed(2)}) to $0`);
-      this.pnl = 0;
-    } else {
-      this.pnl = savedPnl;
-    }
+    this.pnl = saved.pnl || 0;
 
     // Recalculate invested from actual positions (not stale stored value)
     this.totalInvested = 0;
@@ -129,9 +122,72 @@ class Strategy {
       }
     }
 
-    // P&L is tracked by the bot itself when it sells (in rebalance).
-    // No need to reconstruct from trade history — stored P&L is the truth.
-    console.log(`[SYNC] P&L: $${this.pnl.toFixed(2)} (from bot tracking), ${this.positions.size} verified positions`);
+    // Calculate realized P&L from trades made since PNL_START_DATE
+    try {
+      const rawResult = await api.getTrades();
+      let trades;
+      if (Array.isArray(rawResult)) {
+        trades = rawResult;
+      } else if (rawResult && typeof rawResult === 'object') {
+        const arrayKey = ['data', 'trades'].find(k => Array.isArray(rawResult[k]))
+          || Object.keys(rawResult).find(k => Array.isArray(rawResult[k]));
+        trades = arrayKey ? rawResult[arrayKey] : null;
+      }
+
+      if (trades && trades.length > 0) {
+        // Only count trades from PNL_START_DATE onward
+        const startTs = new Date(config.pnlStartDate).getTime();
+        trades = trades.filter(t => {
+          const tradeTime = new Date(t.match_time || t.last_update || 0).getTime();
+          return tradeTime >= startTs;
+        });
+
+        console.log(`[SYNC] ${trades.length} trades since ${config.pnlStartDate}`);
+
+        // Build net position per tokenId
+        const netPositions = new Map();
+        for (const trade of trades) {
+          const tokenId = trade.asset_id;
+          const ourSide = (trade.side || '').toUpperCase();
+          const size = parseFloat(trade.size || 0);
+          const price = parseFloat(trade.price || 0);
+          if (!tokenId || size <= 0 || price <= 0) continue;
+
+          if (!netPositions.has(tokenId)) {
+            netPositions.set(tokenId, { bought: 0, sold: 0, totalCost: 0, totalRevenue: 0 });
+          }
+          const pos = netPositions.get(tokenId);
+          if (ourSide === 'BUY') {
+            pos.bought += size;
+            pos.totalCost += size * price;
+          } else if (ourSide === 'SELL') {
+            pos.sold += size;
+            pos.totalRevenue += size * price;
+          }
+        }
+
+        // Calculate realized P&L from sells
+        let syncedPnl = 0;
+        for (const [tokenId, pos] of netPositions.entries()) {
+          if (pos.sold > 0 && pos.bought > 0) {
+            const avgBuy = pos.totalCost / pos.bought;
+            const avgSell = pos.totalRevenue / pos.sold;
+            const pnl = (avgSell - avgBuy) * pos.sold;
+            syncedPnl += pnl;
+            if (Math.abs(pnl) > 0.01) {
+              console.log(`[SYNC] Realized: $${pnl.toFixed(2)} (buy ${avgBuy.toFixed(3)} → sell ${avgSell.toFixed(3)}, ${pos.sold.toFixed(1)} shares)`);
+            }
+          }
+        }
+
+        this.pnl = syncedPnl;
+        console.log(`[SYNC] Realized P&L since ${config.pnlStartDate}: $${syncedPnl.toFixed(2)}`);
+      }
+    } catch (err) {
+      console.error('[SYNC] P&L calc error:', err.message);
+    }
+
+    console.log(`[SYNC] Final: ${this.positions.size} positions, P&L: $${this.pnl.toFixed(2)}, invested: $${this.totalInvested.toFixed(2)}`);
     this.persist();
   }
 

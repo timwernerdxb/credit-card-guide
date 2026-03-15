@@ -37,6 +37,9 @@ module.exports = {
   btc5mMinConfidence: parseFloat(process.env.BTC_5M_MIN_CONFIDENCE || '0.30'), // need 30%+ confidence
   btc5mScanInterval: 60 * 1000, // check every 60s to catch each 5-min window
 
+  // P&L tracking — ignore all trades before this date
+  pnlStartDate: process.env.PNL_START_DATE || '2026-03-15',
+
   // Server
   port: parseInt(process.env.PORT || '3000'),
 

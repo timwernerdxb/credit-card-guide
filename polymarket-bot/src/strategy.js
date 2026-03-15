@@ -126,6 +126,14 @@ class Strategy {
       console.log(`[SYNC] DEBUG: trader_side values: ${JSON.stringify([...traderSideValues])}`);
       console.log(`[SYNC] DEBUG: status values: ${JSON.stringify([...statusValues])}`);
       console.log(`[SYNC] DEBUG: sample sizes: ${trades.slice(0, 5).map(t => t.size).join(', ')}`);
+      console.log(`[SYNC] DEBUG: sample prices: ${trades.slice(0, 5).map(t => t.price).join(', ')}`);
+
+      // Log first 3 trades fully parsed
+      for (let i = 0; i < Math.min(3, trades.length); i++) {
+        const t = trades[i];
+        const ts = String(t.trader_side || t.side || '').toUpperCase().trim();
+        console.log(`[SYNC] TRADE[${i}]: side="${t.side}" trader_side="${t.trader_side}" → parsed="${ts}" | size=${t.size} price=${t.price} status="${t.status}" | token=${String(t.asset_id).substring(0, 20)}...`);
+      }
 
       // Build net position per tokenId from trade history
       // CLOB client trades may use different field names:
@@ -135,24 +143,16 @@ class Strategy {
 
       for (const trade of trades) {
         const tokenId = trade.asset_id || trade.tokenId || trade.token_id || trade.assetId;
-        // trader_side = this user's perspective, side = order side
-        // Could be "BUY"/"SELL", "buy"/"sell", "TAKER"/"MAKER", "0"/"1", etc.
-        const rawSideStr = String(trade.trader_side || trade.side || '').toUpperCase().trim();
-        // Map various possible values to BUY/SELL
-        let rawSide;
-        if (rawSideStr === 'BUY' || rawSideStr === 'B' || rawSideStr === '0') {
-          rawSide = 'BUY';
-        } else if (rawSideStr === 'SELL' || rawSideStr === 'S' || rawSideStr === '1') {
-          rawSide = 'SELL';
-        } else {
-          rawSide = rawSideStr; // fallback
-        }
+        // `side` = BUY/SELL (order direction)
+        // `trader_side` = MAKER/TAKER (role in trade, NOT direction)
+        // Always use `side` for buy/sell direction
+        const rawSide = (trade.side || '').toUpperCase().trim();
         const size = parseFloat(trade.size || trade.amount || 0);
         const price = parseFloat(trade.price || 0);
         const status = (trade.status || '').toUpperCase();
 
-        // Skip unmatched/cancelled trades
-        if (status && status !== 'MATCHED' && status !== 'CONFIRMED' && status !== 'MINED') continue;
+        // Only skip explicitly cancelled trades
+        if (status === 'CANCELLED' || status === 'CANCELED') continue;
 
         if (!tokenId || size <= 0 || price <= 0) continue;
 

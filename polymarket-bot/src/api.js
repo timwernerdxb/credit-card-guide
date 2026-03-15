@@ -124,14 +124,28 @@ class PolymarketAPI {
     return this.client.getMidpoint(tokenId);
   }
 
+  // ---- Validate order result (CLOB client returns errors as objects, not exceptions) ----
+  _validateResult(result) {
+    if (!result) throw new Error('Empty response from CLOB API');
+    if (result.error) throw new Error(result.error);
+    if (result.status && result.status >= 400) throw new Error(result.error || `HTTP ${result.status}`);
+    return result;
+  }
+
+  // ---- Clamp price to valid range (0.01 - 0.99) ----
+  _clampPrice(price) {
+    return Math.max(0.01, Math.min(0.99, parseFloat(price.toFixed(2))));
+  }
+
   // ---- CLOB: Place a buy order ----
   async placeBuyOrder({ tokenId, price, size, tickSize = '0.01', negRisk = false }) {
+    const clampedPrice = this._clampPrice(price);
     const order = await this.client.createAndPostOrder(
       {
         tokenID: tokenId,
-        price: parseFloat(price.toFixed(2)),
+        price: clampedPrice,
         side: Side.BUY,
-        size: parseFloat(size.toFixed(2)),
+        size: parseFloat(Math.max(0.01, size).toFixed(2)),
       },
       {
         tickSize,
@@ -139,17 +153,18 @@ class PolymarketAPI {
       },
       OrderType.GTC
     );
-    return order;
+    return this._validateResult(order);
   }
 
   // ---- CLOB: Place a sell order ----
   async placeSellOrder({ tokenId, price, size, tickSize = '0.01', negRisk = false }) {
+    const clampedPrice = this._clampPrice(price);
     const order = await this.client.createAndPostOrder(
       {
         tokenID: tokenId,
-        price: parseFloat(price.toFixed(2)),
+        price: clampedPrice,
         side: Side.SELL,
-        size: parseFloat(size.toFixed(2)),
+        size: parseFloat(Math.max(0.01, size).toFixed(2)),
       },
       {
         tickSize,
@@ -157,17 +172,18 @@ class PolymarketAPI {
       },
       OrderType.GTC
     );
-    return order;
+    return this._validateResult(order);
   }
 
   // ---- CLOB: Place a market (FOK) buy ----
   async placeMarketBuy({ tokenId, price, size, tickSize = '0.01', negRisk = false }) {
+    const clampedPrice = this._clampPrice(price);
     const order = await this.client.createAndPostOrder(
       {
         tokenID: tokenId,
-        price: parseFloat(price.toFixed(2)),
+        price: clampedPrice,
         side: Side.BUY,
-        size: parseFloat(size.toFixed(2)),
+        size: parseFloat(Math.max(0.01, size).toFixed(2)),
       },
       {
         tickSize,
@@ -175,7 +191,7 @@ class PolymarketAPI {
       },
       OrderType.FOK
     );
-    return order;
+    return this._validateResult(order);
   }
 
   // ---- CLOB: Cancel order ----

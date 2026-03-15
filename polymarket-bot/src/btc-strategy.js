@@ -159,8 +159,9 @@ class BTCStrategy {
       // Skip low-liquidity markets
       if (parsed.liquidity < 1000) continue;
 
-      // Look for extreme longshot outcomes priced at ≤ maxPrice (default 2¢)
-      if (parsed.yesPrice > 0 && parsed.yesPrice <= maxPrice) {
+      // Look for extreme longshot outcomes priced at 1¢–maxPrice (default 2¢)
+      // API minimum price is 0.01 (1¢), skip anything below
+      if (parsed.yesPrice >= 0.01 && parsed.yesPrice <= maxPrice) {
         const betAmount = this.calculateLotteryBetSize(parsed.yesPrice, parsed.liquidity, maxBet);
         opportunities.push({
           ...parsed,
@@ -172,7 +173,7 @@ class BTCStrategy {
         });
       }
 
-      if (parsed.noPrice > 0 && parsed.noPrice <= maxPrice) {
+      if (parsed.noPrice >= 0.01 && parsed.noPrice <= maxPrice) {
         const betAmount = this.calculateLotteryBetSize(parsed.noPrice, parsed.liquidity, maxBet);
         opportunities.push({
           ...parsed,
